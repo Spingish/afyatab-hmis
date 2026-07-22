@@ -98,5 +98,11 @@ export const triageAPI = {
   getPending:  () => API.get('/triage/pending'),
   create:      (data) => API.post('/triage', data),
 };
-
+// Consultation
+export const consultationAPI = {
+  getQueue:   () => API.get('/consultation/queue'),
+  getByVisit: (visit_id) => API.get(`/consultation/visit/${visit_id}`),
+  getHistory: (patient_id) => API.get(`/consultation/patient/${patient_id}/history`),
+  create:     (data) => API.post('/consultation', data),
+};
 export default API;

@@ -22,22 +22,20 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ status: 'Unhealthy', error: err.message });
   }
 });
-// Routes
-app.use('/api/auth',         require('./routes/auth'));
-app.use('/api/patients',     require('./routes/patients'));
-app.use('/api/visits',       require('./routes/visits'));
-app.use('/api/triage',       require('./routes/triage'));
-app.use('/api/staff',        require('./routes/staff'));
-app.use('/api/laboratory',   require('./routes/laboratory'));
-app.use('/api/pharmacy',     require('./routes/pharmacy'));
-app.use('/api/billing',      require('./routes/billing'));
-app.use('/api/appointments', require('./routes/appointments'));
-app.use('/api/reports',      require('./routes/reports'));
-// 404
+app.use('/api/auth',           require('./routes/auth'));
+app.use('/api/patients',       require('./routes/patients'));
+app.use('/api/visits',         require('./routes/visits'));
+app.use('/api/triage',         require('./routes/triage'));
+app.use('/api/consultation',   require('./routes/consultation'));
+app.use('/api/staff',          require('./routes/staff'));
+app.use('/api/laboratory',     require('./routes/laboratory'));
+app.use('/api/pharmacy',       require('./routes/pharmacy'));
+app.use('/api/billing',        require('./routes/billing'));
+app.use('/api/appointments',   require('./routes/appointments'));
+app.use('/api/reports',        require('./routes/reports'));
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', path: req.originalUrl });
 });
-// Error handler
 app.use((err, req, res, next) => {
   console.error('Server Error:', err.message);
   res.status(500).json({ error: 'Internal server error', message: err.message });
