@@ -91,5 +91,12 @@ export const reportAPI = {
   getInventory:   () => API.get('/reports/inventory'),
   getPatients:    () => API.get('/reports/patients'),
 };
+// Triage
+export const triageAPI = {
+  getByVisit:  (visit_id) => API.get(`/triage/visit/${visit_id}`),
+  getToday:    () => API.get('/triage/today'),
+  getPending:  () => API.get('/triage/pending'),
+  create:      (data) => API.post('/triage', data),
+};
 
 export default API;

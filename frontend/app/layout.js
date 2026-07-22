@@ -8,6 +8,7 @@ import './globals.css';
 const navItems = [
   { href:'/',             icon:'📊', label:'Dashboard'   },
   { href:'/reception',    icon:'🚪', label:'Reception'   },
+  { href:'/triage',       icon:'❤️', label:'Triage'      },
   { href:'/patients',     icon:'👥', label:'Patients'    },
   { href:'/appointments', icon:'📅', label:'Appointments'},
   { href:'/mch',          icon:'🏥', label:'MCH Clinic'  },
