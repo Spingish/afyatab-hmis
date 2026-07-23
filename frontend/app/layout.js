@@ -6,19 +6,31 @@ import { patientAPI } from '../lib/api';
 import './globals.css';
 
 const navItems = [
-  { href:'/',             icon:'📊', label:'Dashboard'   },
-  { href:'/reception',    icon:'🚪', label:'Reception'   },
-  { href:'/triage',       icon:'❤️', label:'Triage'      },
-  { href:'/patients',     icon:'👥', label:'Patients'    },
-  { href:'/appointments', icon:'📅', label:'Appointments'},
-  { href:'/mch',          icon:'🏥', label:'MCH Clinic'  },
-  { href:'/consultation', icon:'🩺', label:'Consultation'},
-  { href:'/laboratory',   icon:'🧪', label:'Laboratory'  },
-  { href:'/pharmacy',     icon:'💊', label:'Pharmacy'    },
-  { href:'/billing',      icon:'💰', label:'Billing'     },
-  { href:'/reports',      icon:'📈', label:'Reports'     },
-  { href:'/staff',        icon:'👨', label:'Staff'       },
-  { href:'/settings',     icon:'⚙',  label:'Settings'   },
+  // Core
+  { href:'/',                  icon:'📊', label:'Dashboard',          section:'CORE' },
+  // Patient Management
+  { href:'/reception',         icon:'🚪', label:'Reception',          section:'PATIENTS' },
+  { href:'/patients',          icon:'👥', label:'Patient Register',   section:'PATIENTS' },
+  // Clinical Services
+  { href:'/triage',            icon:'❤️', label:'Triage',             section:'CLINICAL' },
+  { href:'/consultation',      icon:'🩺', label:'Consultation',       section:'CLINICAL' },
+  { href:'/inpatient',         icon:'🛏️', label:'Inpatient / Wards',  section:'CLINICAL' },
+  { href:'/mch',               icon:'🤰', label:'MCH Clinic',         section:'CLINICAL' },
+  // Diagnostics
+  { href:'/laboratory',        icon:'🧪', label:'Laboratory',         section:'DIAGNOSTICS' },
+  // Pharmacy
+  { href:'/pharmacy',          icon:'💊', label:'Pharmacy',           section:'PHARMACY' },
+  { href:'/inventory',         icon:'📦', label:'Inventory',          section:'PHARMACY' },
+  // Finance
+  { href:'/billing',           icon:'💰', label:'Billing & Finance',  section:'FINANCE' },
+  // Appointments
+  { href:'/appointments',      icon:'📅', label:'Appointments',       section:'CLINICAL' },
+  // Reports
+  { href:'/reports',           icon:'📈', label:'Reports & HMIS',     section:'REPORTS' },
+  // Admin
+  { href:'/staff',             icon:'👨‍⚕️', label:'HR Management',     section:'ADMIN' },
+  { href:'/settings',          icon:'⚙️',  label:'Administration',     section:'ADMIN' },
+  { href:'/superadmin',        icon:'🛡️', label:'Super Admin',         section:'ADMIN' }, 
 ];
 
 const pageTitles = {
@@ -103,17 +115,40 @@ export default function RootLayout({ children }) {
             </div>
           </div>
           <nav className="flex-1 py-3 overflow-y-auto">
-            {sidebarOpen && <div className="px-4 pb-1 pt-2 text-xs font-bold text-white/30 uppercase tracking-widest">Main Menu</div>}
-            {navItems.map(item => {
-              const active = pathname === item.href;
-              return (
-                <Link key={item.href} href={item.href}
-                  className={active ? 'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 text-sm bg-blue-600 text-white font-semibold' : 'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 text-sm text-white/70 hover:bg-white/10 hover:text-white'}>
-                  <span className="text-base flex-shrink-0 w-5 text-center">{item.icon}</span>
-                  {sidebarOpen && <span>{item.label}</span>}
-                </Link>
-              );
-            })}
+            {(() => {
+              let lastSection = null;
+              const sectionLabels = {
+                CORE:'Core',
+                PATIENTS:'Patient Management',
+                CLINICAL:'Clinical Services',
+                DIAGNOSTICS:'Diagnostics',
+                PHARMACY:'Pharmacy & Stock',
+                FINANCE:'Billing & Finance',
+                REPORTS:'Reports & Analytics',
+                ADMIN:'Administration'
+              };
+              return navItems.map(item => {
+                const active = pathname === item.href;
+                const showHeader = sidebarOpen && item.section !== lastSection;
+                lastSection = item.section;
+                return (
+                  <div key={item.href}>
+                    {showHeader && (
+                      <div className="px-4 pb-1 pt-3 text-xs font-bold text-white/25 uppercase tracking-widest">
+                        {sectionLabels[item.section]}
+                      </div>
+                    )}
+                    <Link href={item.href}
+                      className={active
+                        ? 'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 text-sm bg-blue-600 text-white font-semibold'
+                        : 'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 text-sm text-white/70 hover:bg-white/10 hover:text-white'}>
+                      <span className="text-base flex-shrink-0 w-5 text-center">{item.icon}</span>
+                      {sidebarOpen && <span>{item.label}</span>}
+                    </Link>
+                  </div>
+                );
+              });
+            })()}
           </nav>
           <div className="p-3 border-t border-white/10 flex-shrink-0">
             <button onClick={() => setDark(!dark)}
