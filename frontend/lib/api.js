@@ -105,4 +105,16 @@ export const consultationAPI = {
   getHistory: (patient_id) => API.get(`/consultation/patient/${patient_id}/history`),
   create:     (data) => API.post('/consultation', data),
 };
+// Inpatient
+export const inpatientAPI = {
+  getWards:       () => API.get('/inpatient/wards'),
+  getWardBeds:    (ward_id) => API.get(`/inpatient/wards/${ward_id}/beds`),
+  createWard:     (data) => API.post('/inpatient/wards', data),
+  getAdmissions:  (status) => API.get('/inpatient/admissions', { params: { status } }),
+  getAdmission:   (id) => API.get(`/inpatient/admissions/${id}`),
+  admit:          (data) => API.post('/inpatient/admissions', data),
+  addNote:        (id, data) => API.post(`/inpatient/admissions/${id}/notes`, data),
+  discharge:      (id, data) => API.put(`/inpatient/admissions/${id}/discharge`, data),
+  getWardTypes:   () => API.get('/inpatient/ward-types'),
+};
 export default API;

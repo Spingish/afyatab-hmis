@@ -28,6 +28,7 @@ app.use('/api/patients',       require('./routes/patients'));
 app.use('/api/visits',         require('./routes/visits'));
 app.use('/api/triage',         require('./routes/triage'));
 app.use('/api/consultation',   require('./routes/consultation'));
+app.use('/api/inpatient',      require('./routes/inpatient'));
 app.use('/api/staff',          require('./routes/staff'));
 app.use('/api/laboratory',     require('./routes/laboratory'));
 app.use('/api/pharmacy',       require('./routes/pharmacy'));
