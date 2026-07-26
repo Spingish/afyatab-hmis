@@ -1,0 +1,17 @@
+-- ============================================================
+-- AfyaTab HMIS — Default Admin Seed
+-- Creates the staff + system user record matching the
+-- credentials shown on the login page (admin / Admin@2026).
+-- Safe to run multiple times (uses ON CONFLICT DO NOTHING).
+-- ============================================================
+
+-- 1. Staff record for the admin account
+INSERT INTO staff (staff_no, first_name, last_name, gender, phone, department_id, role_id, shift, hire_date, status)
+SELECT 'S001', 'System', 'Administrator', 'Other', '0700000000',
+       (SELECT id FROM departments WHERE code = 'ADMIN'),
+       (SELECT id FROM roles WHERE name = 'Admin'),
+       'Day', CURRENT_DATE, 'Active'
+WHERE NOT EXISTS (SELECT 1 FROM staff WHERE staff_no = 'S001');
+
+-- 2. System user login (password hash below = "Admin@2026")
+INSERT INTO users (staff_id, username, password_hash,
