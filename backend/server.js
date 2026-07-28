@@ -36,6 +36,7 @@ app.use('/api/pharmacy',       require('./routes/pharmacy'));
 app.use('/api/billing',        require('./routes/billing'));
 app.use('/api/appointments',   require('./routes/appointments'));
 app.use('/api/reports',        require('./routes/reports'));
+app.use('/api/settings',       require('./routes/settings'));
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', path: req.originalUrl });
 });

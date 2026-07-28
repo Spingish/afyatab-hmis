@@ -24,7 +24,8 @@ router.get('/', async (req, res) => {
       appointmentsToday,
       triageToday,
       consultationsToday,
-      monthlyTrend
+      monthlyTrend,
+      waitingList
     ] = await Promise.all([
 
       // Today summary
@@ -204,6 +205,16 @@ router.get('/', async (req, res) => {
          GROUP BY DATE_TRUNC('month', visit_date)
          ORDER BY DATE_TRUNC('month', visit_date)`
       ),
+
+      // Waiting List — patients waiting for a scheduled appointment (today) or a
+      // pending procedure/surgery (ordered but not yet done).
+      pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM appointments
+              WHERE appointment_date = CURRENT_DATE AND status = 'Scheduled') AS scheduled_appointments,
+           (SELECT COUNT(*) FROM consultation_procedures
+              WHERE status = 'Ordered') AS pending_procedures`
+      ),
     ]);
 
     res.json({
@@ -218,6 +229,7 @@ router.get('/', async (req, res) => {
           triage:            triageToday.rows[0],
           consultations:     parseInt(consultationsToday.rows[0].total),
           admissions:        admissions.rows[0],
+          waiting_list:      parseInt(waitingList.rows[0].scheduled_appointments) + parseInt(waitingList.rows[0].pending_procedures),
         },
         // Financial
         revenue: {
@@ -328,23 +340,62 @@ router.get('/trend', async (req, res) => {
   }
 });
 
-// GET /api/dashboard/opd-by-age?period=week|daily
-// Weekly OPD visits split by age band (<5 years vs >=5 years).
+// GET /api/dashboard/opd-by-age?period=daily|week|month|year
+// OPD visits split by age band (<5 years vs >=5 years), bucketed by the requested period.
 router.get('/opd-by-age', async (req, res) => {
-  const days = req.query.period === 'daily' ? 1 : 7;
+  const period = ['daily', 'week', 'month', 'year'].includes(req.query.period)
+    ? req.query.period
+    : 'week';
   try {
-    const result = await pool.query(
-      `SELECT v.visit_date,
-              COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) < 5 THEN 1 END) AS under_five,
-              COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) >= 5 OR p.date_of_birth IS NULL THEN 1 END) AS over_five
-       FROM visits v
-       JOIN patients p ON p.id = v.patient_id
-       WHERE v.visit_date >= CURRENT_DATE - INTERVAL '${days === 1 ? 0 : 6} days'
-         AND v.patient_type = 'Outpatient'
-       GROUP BY v.visit_date
-       ORDER BY v.visit_date`
-    );
-    res.json({ success: true, data: result.rows });
+    let query;
+    if (period === 'daily') {
+      query = `
+        SELECT TO_CHAR(v.visit_date, 'Dy') AS label,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) < 5 THEN 1 END) AS under_five,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) >= 5 OR p.date_of_birth IS NULL THEN 1 END) AS over_five
+        FROM visits v
+        JOIN patients p ON p.id = v.patient_id
+        WHERE v.visit_date >= CURRENT_DATE - INTERVAL '13 days'
+          AND v.patient_type = 'Outpatient'
+        GROUP BY v.visit_date
+        ORDER BY v.visit_date`;
+    } else if (period === 'month') {
+      query = `
+        SELECT TO_CHAR(DATE_TRUNC('month', v.visit_date), 'Mon') AS label,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) < 5 THEN 1 END) AS under_five,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) >= 5 OR p.date_of_birth IS NULL THEN 1 END) AS over_five
+        FROM visits v
+        JOIN patients p ON p.id = v.patient_id
+        WHERE v.visit_date >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
+          AND v.patient_type = 'Outpatient'
+        GROUP BY DATE_TRUNC('month', v.visit_date)
+        ORDER BY DATE_TRUNC('month', v.visit_date)`;
+    } else if (period === 'year') {
+      query = `
+        SELECT TO_CHAR(DATE_TRUNC('year', v.visit_date), 'YYYY') AS label,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) < 5 THEN 1 END) AS under_five,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) >= 5 OR p.date_of_birth IS NULL THEN 1 END) AS over_five
+        FROM visits v
+        JOIN patients p ON p.id = v.patient_id
+        WHERE v.visit_date >= DATE_TRUNC('year', NOW()) - INTERVAL '4 years'
+          AND v.patient_type = 'Outpatient'
+        GROUP BY DATE_TRUNC('year', v.visit_date)
+        ORDER BY DATE_TRUNC('year', v.visit_date)`;
+    } else {
+      // week (default)
+      query = `
+        SELECT TO_CHAR(v.visit_date, 'Dy') AS label,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) < 5 THEN 1 END) AS under_five,
+               COUNT(CASE WHEN DATE_PART('year', AGE(v.visit_date, p.date_of_birth)) >= 5 OR p.date_of_birth IS NULL THEN 1 END) AS over_five
+        FROM visits v
+        JOIN patients p ON p.id = v.patient_id
+        WHERE v.visit_date >= CURRENT_DATE - INTERVAL '6 days'
+          AND v.patient_type = 'Outpatient'
+        GROUP BY v.visit_date
+        ORDER BY v.visit_date`;
+    }
+    const result = await pool.query(query);
+    res.json({ success: true, period, data: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
