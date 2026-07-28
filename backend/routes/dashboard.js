@@ -1,4 +1,4 @@
-// AfyaTab HMIS - Dashboard Routes
+// TibaMax HMIS - Dashboard Routes
 const express = require('express');
 const router  = express.Router();
 const pool    = require('../config/db');

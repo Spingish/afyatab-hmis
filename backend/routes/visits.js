@@ -1,4 +1,4 @@
-// AfyaTab HMIS - Visit Routes
+// TibaMax HMIS - Visit Routes
 const express = require('express');
 const router  = express.Router();
 const visitController = require('../controllers/visitController');

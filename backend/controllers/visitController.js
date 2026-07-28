@@ -1,4 +1,4 @@
-// AfyaTab HMIS - Visit Controller
+// TibaMax HMIS - Visit Controller
 const VisitModel   = require('../models/visitModel');
 const PatientModel = require('../models/patientModel');
 

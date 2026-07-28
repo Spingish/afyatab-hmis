@@ -12,12 +12,12 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
-  res.json({ system: 'AfyaTab HMIS', version: '1.0.0', status: 'Running' });
+  res.json({ system: 'TibaMax HMIS', version: '1.0.0', status: 'Running' });
 });
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() AS server_time');
-    res.json({ system: 'AfyaTab HMIS', status: 'Healthy', database: 'afyatab_hmis', server_time: result.rows[0].server_time, node_version: process.version });
+    res.json({ system: 'TibaMax HMIS', status: 'Healthy', database: 'afyatab_hmis', server_time: result.rows[0].server_time, node_version: process.version });
   } catch (err) {
     res.status(500).json({ status: 'Unhealthy', error: err.message });
   }
@@ -46,7 +46,7 @@ app.use((err, req, res, next) => {
 });
 app.listen(PORT, () => {
   console.log('============================================');
-  console.log('   AfyaTab HMIS - Backend API');
+  console.log('   TibaMax HMIS - Backend API');
   console.log('============================================');
   console.log('   Status : Running');
   console.log('   Port   : ' + PORT);

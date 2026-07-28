@@ -139,8 +139,8 @@ export default function RootLayout({ children }) {
 
   useEffect(() => {
     if (pathname === '/login') return;
-    const token    = localStorage.getItem('afyatab_token');
-    const userData = localStorage.getItem('afyatab_user');
+    const token    = localStorage.getItem('tibamax_token');
+    const userData = localStorage.getItem('tibamax_user');
     if (!token) { router.push('/login'); return; }
     if (userData) setUser(JSON.parse(userData));
   }, [pathname]);
@@ -174,8 +174,8 @@ export default function RootLayout({ children }) {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('afyatab_token');
-    localStorage.removeItem('afyatab_user');
+    localStorage.removeItem('tibamax_token');
+    localStorage.removeItem('tibamax_user');
     router.push('/login');
   };
 
@@ -203,12 +203,12 @@ export default function RootLayout({ children }) {
                   onError={e => { e.target.style.display = 'none'; }} />
               ) : (
                 <div className="w-11 h-11 bg-white rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0 text-sky-600">
-                  {(hospitalSettings?.hospital_name || 'AfyaTab')[0]}
+                  {(hospitalSettings?.hospital_name || 'TibaMax')[0]}
                 </div>
               )}
               {sidebarOpen && (
                 <div className="min-w-0">
-                  <div className="font-bold text-sm leading-tight truncate text-white">{hospitalSettings?.hospital_name || 'AfyaTab HMIS'}</div>
+                  <div className="font-bold text-sm leading-tight truncate text-white">{hospitalSettings?.hospital_name || 'TibaMax HMIS'}</div>
                   <div className="text-xs text-white/70 leading-tight truncate">{hospitalSettings?.motto || 'Hospital Management System'}</div>
                 </div>
               )}
@@ -280,7 +280,7 @@ export default function RootLayout({ children }) {
           <header className={dark ? 'bg-gray-800 border-gray-700 border-b px-4 h-14 flex items-center justify-between sticky top-0 z-40 gap-4' : 'bg-white border-gray-200 border-b px-4 h-14 flex items-center justify-between sticky top-0 z-40 gap-4'}>
             <div className="flex items-center gap-3 flex-shrink-0">
               <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-blue-600 text-lg">☰</button>
-              <span className="font-semibold text-sm">{pageTitles[pathname] || 'AfyaTab HMIS'}</span>
+              <span className="font-semibold text-sm">{pageTitles[pathname] || 'TibaMax HMIS'}</span>
             </div>
             <div className="flex-1 max-w-md relative" ref={searchRef}>
               <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
@@ -366,7 +366,7 @@ export default function RootLayout({ children }) {
           </header>
           <main className="flex-1 p-6 pb-14 overflow-y-auto">{children}</main>
           <footer className={(sidebarOpen ? 'left-[17rem]' : 'left-[5.5rem]') + ' fixed bottom-0 right-0 border-gray-200 border-t px-6 py-2 text-xs flex justify-between text-gray-400 bg-white z-30 transition-all duration-300'}>
-            <span>AfyaTab HMIS v1.0 — Webuye West Sub-County Hospital <span className="text-gray-300">|</span> Your corporate health management information system.</span>
+            <span>TibaMax HMIS v1.0 — Webuye West Sub-County Hospital <span className="text-gray-300">|</span> Your corporate health management information system.</span>
             <span>Backend: localhost:5000 • DB: afyatab_hmis</span>
           </footer>
         </div>

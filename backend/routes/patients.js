@@ -1,4 +1,4 @@
-// AfyaTab HMIS — Patient Routes
+// TibaMax HMIS — Patient Routes
 const express = require('express');
 const router  = express.Router();
 const patientController = require('../controllers/patientController');

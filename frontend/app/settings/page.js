@@ -50,7 +50,7 @@ export default function Settings() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-black">Settings</h1>
-        <p className="text-gray-500 text-sm">AfyaTab HMIS system configuration</p>
+        <p className="text-gray-500 text-sm">TibaMax HMIS system configuration</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -97,7 +97,7 @@ export default function Settings() {
               { label:'Database',             value:'PostgreSQL 18',          badge:'bg-blue-100 text-blue-700' },
               { label:'Backend',              value:'Node.js + Express',      badge:'bg-green-100 text-green-700' },
               { label:'Frontend',             value:'Next.js + Tailwind',     badge:'bg-violet-100 text-violet-700' },
-              { label:'System Version',       value:'AfyaTab HMIS v1.0.0',   badge:'bg-gray-100 text-gray-600' },
+              { label:'System Version',       value:'TibaMax HMIS v1.0.0',   badge:'bg-gray-100 text-gray-600' },
             ].map(s => (
               <div key={s.label} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
                 <span className="text-sm text-black">{s.label}</span>

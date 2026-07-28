@@ -1,4 +1,4 @@
-// AfyaTab HMIS - Super Admin Routes
+// TibaMax HMIS - Super Admin Routes
 const express = require('express');
 const router  = express.Router();
 const bcrypt  = require('bcryptjs');

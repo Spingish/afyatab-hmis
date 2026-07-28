@@ -96,7 +96,7 @@ export default function Consultation() {
   const handleSubmit = async () => {
     if (!form.chief_complaint) { showMsg('Chief complaint is required', 'error'); return; }
     if (!form.working_diagnosis) { showMsg('Working diagnosis is required', 'error'); return; }
-    const user = JSON.parse(localStorage.getItem('afyatab_user') || '{}');
+    const user = JSON.parse(localStorage.getItem('tibamax_user') || '{}');
     setSubmitting(true);
     try {
       const r = await consultationAPI.create({

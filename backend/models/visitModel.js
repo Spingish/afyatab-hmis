@@ -1,4 +1,4 @@
-// AfyaTab HMIS - Visit Model
+// TibaMax HMIS - Visit Model
 const pool = require('../config/db');
 
 const VisitModel = {

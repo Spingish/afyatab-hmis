@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const getAuthHeader = () => {
-  const token = localStorage.getItem('afyatab_token');
+  const token = localStorage.getItem('tibamax_token');
   return { Authorization: `Bearer ${token}` };
 };
 
@@ -128,7 +128,7 @@ export default function SuperAdmin() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             🛡️ Super Admin Panel
           </h1>
-          <p className="text-gray-500 text-sm">AfyaTab HMIS — Full System Control</p>
+          <p className="text-gray-500 text-sm">TibaMax HMIS — Full System Control</p>
         </div>
         <div className="flex gap-2">
           <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide">
@@ -434,7 +434,7 @@ export default function SuperAdmin() {
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
                 <h3 className="font-bold text-sm mb-4">System Information</h3>
                 {[
-                  { label:'System Name',    value:'AfyaTab HMIS'                },
+                  { label:'System Name',    value:'TibaMax HMIS'                },
                   { label:'Version',        value:'v1.0.0'                      },
                   { label:'Facility',       value:'Webuye West Sub-County Hospital'},
                   { label:'County',         value:'Bungoma County'              },

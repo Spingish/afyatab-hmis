@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TibaMax HMIS — Multi-Facility Health Networks, Connected Locally</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+
+  :root{
+    --emerald-deep: #065F46;
+    --emerald: #0E9F6E;
+    --emerald-bright: #10B981;
+    --slate-900: #0F172A;
+    --slate-600: #475569;
+    --slate-400: #94A3B8;
+    --slate-100: #F1F5F9;
+    --slate-200: #E2E8F0;
+    --white: #ffffff;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    font-family:'Inter', sans-serif;
+    color:var(--slate-900);
+    background:var(--white);
+    line-height:1.5;
+  }
+  h1,h2,h3,.display{ font-family:'Space Grotesk', sans-serif; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 24px; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
+  }
+
+  /* ===== Header ===== */
+  header{
+    position:sticky; top:0; z-index:60;
+    background:rgba(255,255,255,0.94);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--slate-200);
+  }
+  .nav{ display:flex; align-items:center; justify-content:space-between; padding:16px 24px; position:relative; }
+  .logo{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; letter-spacing:-0.01em; }
+  .logo-mark{ width:30px; height:30px; flex-shrink:0; }
+  .nav-links{ display:flex; align-items:center; gap:6px; }
+  .nav-item{ position:relative; }
+  .nav-link{
+    display:flex; align-items:center; gap:6px; font-size:14.5px; font-weight:500; color:var(--slate-600);
+    padding:10px 14px; border-radius:8px; border:none; background:none; cursor:pointer; transition:color .15s ease, background .15s ease;
+  }
+  .nav-link:hover, .nav-link.active{ color:var(--emerald-deep); background:var(--slate-100); }
+  .caret{ transition:transform .18s ease; }
+  .nav-link.active .caret{ transform:rotate(180deg); }
+
+  .dropdown{
+    position:absolute; top:calc(100% + 10px); left:50%; transform:translateX(-50%);
+    width:560px; background:#fff; border:1px solid var(--slate-200); border-radius:14px;
+    box-shadow:0 24px 60px -20px rgba(15,23,42,0.22);
+    padding:10px; display:none; grid-template-columns:1fr 1fr; gap:6px;
+  }
+  .dropdown.open{ display:grid; }
+  .dd-item{
+    display:flex; gap:12px; padding:14px; border-radius:10px; transition:background .15s ease;
+  }
+  .dd-item:hover{ background:var(--slate-100); }
+  .dd-icon{ width:34px; height:34px; flex-shrink:0; border-radius:8px; background:var(--slate-100); display:flex; align-items:center; justify-content:center; color:var(--emerald-deep); }
+  .dd-item.featured .dd-icon{ background:var(--emerald-deep); color:#fff; }
+  .dd-item h4{ font-size:14px; font-weight:600; margin-bottom:3px; }
+  .dd-item p{ font-size:12.5px; color:var(--slate-600); line-height:1.4; }
+  .dd-item.featured{ grid-column:1 / -1; background:#EDFBF5; border:1px solid #C8F0DE; }
+  .sync-badge{
+    display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600;
+    color:var(--emerald-deep); background:#fff; border:1px solid #C8F0DE; padding:2px 8px; border-radius:20px; margin-top:6px;
+  }
+  .sync-dot{ width:6px; height:6px; border-radius:50%; background:var(--emerald-bright); animation:pulse 1.8s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+  .nav-cta{ display:flex; align-items:center; gap:12px; }
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:10px 18px; border-radius:8px; font-weight:600; font-size:14px;
+    border:1px solid transparent; cursor:pointer; transition:all .15s ease;
+  }
+  .btn-primary{ background:var(--emerald-deep); color:#fff; }
+  .btn-primary:hover{ background:#054E39; }
+  .btn-ghost{ color:var(--slate-900); border-color:var(--slate-200); background:#fff; }
+  .btn-ghost:hover{ border-color:var(--slate-400); }
+  .btn:focus-visible{ outline:2px solid var(--emerald-bright); outline-offset:2px; }
+
+  /* ===== Hero ===== */
+  .hero{ padding:80px 0 60px; background:linear-gradient(180deg, #FAFCFB 0%, #ffffff 70%); position:relative; overflow:hidden; }
+  .hero-grid{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:50px; align-items:center; }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600;
+    color:var(--emerald-deep); background:#EDFBF5; padding:6px 12px; border-radius:20px; margin-bottom:22px;
+    border:1px solid #C8F0DE;
+  }
+  h1.hero-title{ font-size:44px; line-height:1.1; font-weight:700; letter-spacing:-0.02em; margin-bottom:20px; }
+  h1.hero-title .accent{ color:var(--emerald-deep); }
+  .hero-sub{ font-size:17px; color:var(--slate-600); max-width:480px; margin-bottom:32px; }
+  .hero-actions{ display:flex; gap:14px; }
+
+  /* Local Network Gateway card */
+  .gateway-card{
+    background:#fff; border:1px solid var(--slate-200); border-radius:16px;
+    box-shadow:0 24px 60px -24px rgba(6,95,70,0.28);
+    padding:22px;
+  }
+  .gateway-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .gateway-head h3{ font-size:15px; font-weight:600; }
+  .net-status{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--emerald-deep); font-weight:600; }
+  .net-status .sync-dot{ width:7px; height:7px; }
+
+  .facility-select{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--slate-200);
+    background:var(--slate-100); font-size:14px; font-weight:500; color:var(--slate-900);
+    margin-bottom:16px; cursor:pointer; appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center;
+  }
+  .gateway-toggles{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .toggle-btn{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    padding:22px 12px; border-radius:12px; border:1.5px solid var(--slate-200); background:#fff;
+    cursor:pointer; transition:all .15s ease;
+  }
+  .toggle-btn:hover{ border-color:var(--emerald); background:#F5FDFA; }
+  .toggle-btn.selected{ border-color:var(--emerald-deep); background:#EDFBF5; }
+  .toggle-btn .t-icon{ width:26px; height:26px; color:var(--emerald-deep); }
+  .toggle-btn span{ font-size:13.5px; font-weight:600; }
+  .gateway-foot{ margin-top:14px; font-size:11.5px; color:var(--slate-400); text-align:center; }
+
+  /* ===== Modules ===== */
+  section{ padding:88px 0; }
+  .section-head{ max-width:600px; margin-bottom:48px; }
+  .eyebrow-plain{ font-size:13px; font-weight:600; color:var(--emerald-deep); letter-spacing:.04em; text-transform:uppercase; margin-bottom:12px; display:block; }
+  .section-head h2{ font-size:32px; font-weight:700; letter-spacing:-0.01em; margin-bottom:14px; }
+  .section-head p{ color:var(--slate-600); font-size:16px; }
+
+  .modules{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--slate-200); border:1px solid var(--slate-200); border-radius:14px; overflow:hidden; }
+  .module{ background:#fff; padding:28px 22px; transition:background .15s ease; }
+  .module:hover{ background:var(--slate-100); }
+  .module.featured{ background:#EDFBF5; }
+  .module .icon{ width:34px; height:34px; margin-bottom:14px; color:var(--emerald-deep); }
+  .module h3{ font-size:16px; font-weight:600; margin-bottom:8px; }
+  .module p{ font-size:13.5px; color:var(--slate-600); }
+
+  /* ===== Updates ===== */
+  .updates-section{ background:var(--slate-100); }
+  .updates-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
+  .update-card{ background:#fff; border:1px solid var(--slate-200); border-radius:14px; padding:24px; transition:transform .15s ease, box-shadow .15s ease; }
+  .update-card:hover{ transform:translateY(-3px); box-shadow:0 20px 40px -24px rgba(15,23,42,0.2); }
+  .update-date{ font-size:12px; color:var(--slate-400); margin-bottom:10px; font-weight:500; }
+  .update-tag{ display:inline-block; font-size:11px; font-weight:600; color:var(--emerald-deep); background:#EDFBF5; padding:3px 9px; border-radius:20px; margin-bottom:12px; }
+  .update-card h4{ font-size:16px; font-weight:600; margin-bottom:8px; line-height:1.35; }
+  .update-card p{ font-size:13.5px; color:var(--slate-600); }
+
+  /* ===== CTA / Footer ===== */
+  .cta-band{ text-align:center; }
+  .cta-band h2{ font-size:30px; font-weight:700; margin-bottom:14px; }
+  .cta-band p{ color:var(--slate-600); margin-bottom:30px; }
+  .cta-actions{ display:flex; gap:14px; justify-content:center; }
+
+  footer{ border-top:1px solid var(--slate-200); padding:48px 0 28px; }
+  .foot-grid{ display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:32px; margin-bottom:40px; }
+  .foot-col h5{ font-size:13px; font-weight:600; margin-bottom:14px; color:var(--slate-600); text-transform:uppercase; letter-spacing:.04em; }
+  .foot-col a{ display:block; font-size:14px; color:var(--slate-900); margin-bottom:10px; }
+  .foot-col a:hover{ color:var(--emerald-deep); }
+  .foot-bottom{ display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--slate-600); border-top:1px solid var(--slate-200); padding-top:22px; }
+
+  @media (max-width: 900px){
+    .nav-links{ display:none; }
+    .hero-grid{ grid-template-columns:1fr; }
+    h1.hero-title{ font-size:32px; }
+    .modules{ grid-template-columns:1fr 1fr; }
+    .updates-grid{ grid-template-columns:1fr; }
+    .foot-grid{ grid-template-columns:1fr 1fr; }
+    .dropdown{ width:92vw; left:0; transform:none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav wrap">
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 30 30" fill="none">
+        <rect width="30" height="30" rx="7" fill="#065F46"/>
+        <path d="M8 15h4l2-6 3 12 2-6h3" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      TibaMax HMIS
+    </div>
+
+    <nav class="nav-links">
+      <div class="nav-item">
+        <button class="nav-link" id="solutionsBtn" aria-expanded="false">
+          Solutions
+          <svg class="caret" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4.5l3 3 3-3"/></svg>
+        </button>
+        <div class="dropdown" id="solutionsDropdown">
+          <a class="dd-item" href="#modules">
+            <div class="dd-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></div>
+            <div><h4>Multi-Facility EHR</h4><p>One patient record, shared across every linked facility.</p></div>
+          </a>
+          <a class="dd-item" href="#modules">
+            <div class="dd-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9M12 19V5M20 19v-7"/></svg></div>
+            <div><h4>Workflow Analytics</h4><p>See patient flow, wait times and load across your network.</p></div>
+          </a>
+          <a class="dd-item" href="#modules">
+            <div class="dd-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6l1 4H8l1-4z"/><path d="M7 7h10l1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L7 7z"/></svg></div>
+            <div><h4>Inventory &amp; Billing</h4><p>Stock, dispensing and claims kept in sync facility to facility.</p></div>
+          </a>
+          <a class="dd-item featured" href="#modules">
+            <div class="dd-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-3"/></svg></div>
+            <div>
+              <h4>Community Outreach &amp; Screenings</h4>
+              <p>Run mobile screenings with no connection, sync the results once you're back online.</p>
+              <span class="sync-badge"><span class="sync-dot"></span> Offline-first ready</span>
+            </div>
+          </a>
+        </div>
+      </div>
+      <a class="nav-link" href="#updates">Updates</a>
+      <a class="nav-link" href="#contact">Contact</a>
+    </nav>
+
+    <div class="nav-cta">
+      <a href="#" class="btn btn-ghost" id="patientAccessNav">Patient access</a>
+      <a href="#" class="btn btn-primary" id="staffLoginNav">Staff login</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow"><span class="sync-dot"></span> Live across 40+ facilities</span>
+      <h1 class="hero-title">Multi-Facility Health Networks, <span class="accent">Connected Locally.</span></h1>
+      <p class="hero-sub">TibaMax links registration, records, pharmacy and billing across every facility in your network — and keeps working even when the connection between them doesn't.</p>
+      <div class="hero-actions">
+        <a href="#modules" class="btn btn-primary">See what's included</a>
+        <a href="#contact" class="btn btn-ghost">Talk to us</a>
+      </div>
+    </div>
+
+    <div class="gateway-card">
+      <div class="gateway-head">
+        <h3>Local Network Gateway</h3>
+        <span class="net-status"><span class="sync-dot"></span> Synced</span>
+      </div>
+      <select class="facility-select" id="facilitySelect">
+        <option>Webuye West Sub-County Hospital</option>
+        <option>Bungoma Referral Hospital</option>
+        <option>Kanduyi Health Centre</option>
+        <option>+ Add a facility</option>
+      </select>
+      <div class="gateway-toggles">
+        <button class="toggle-btn selected" id="patientAccessBtn">
+          <svg class="t-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+          <span>Patient Access</span>
+        </button>
+        <button class="toggle-btn" id="staffWorkflowBtn">
+          <svg class="t-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+          <span>Staff Workflow</span>
+        </button>
+      </div>
+      <p class="gateway-foot">Connects to whichever facility server is reachable on your local network.</p>
+    </div>
+  </div>
+</section>
+
+<section id="modules">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow-plain">Solutions</span>
+      <h2>Built for a network, not just one building.</h2>
+      <p>Each module works standalone at a single facility, or shares data across every facility in your network.</p>
+    </div>
+    <div class="modules">
+      <div class="module">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+        <h3>Multi-Facility EHR</h3>
+        <p>A patient registered at one site is already on file at the next — no re-entry, no paper transfer.</p>
+      </div>
+      <div class="module">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V9M12 19V5M20 19v-7"/></svg>
+        <h3>Workflow Analytics</h3>
+        <p>Compare wait times, staffing load and patient volume across every linked facility, live.</p>
+      </div>
+      <div class="module">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 3h6l1 4H8l1-4z"/><path d="M7 7h10l1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L7 7z"/></svg>
+        <h3>Inventory &amp; Billing</h3>
+        <p>Stock levels and claims reconcile automatically between the facilities that share supply.</p>
+      </div>
+      <div class="module featured">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-3"/></svg>
+        <h3>Community Outreach &amp; Screenings</h3>
+        <p>Run mobile screenings anywhere, offline. Everything you record syncs the moment you're back on the network.</p>
+        <span class="sync-badge" style="margin-top:12px;"><span class="sync-dot"></span> Offline-first ready</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="updates-section" id="updates">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow-plain">Updates</span>
+      <h2>What's new across the network.</h2>
+    </div>
+    <div class="updates-grid">
+      <div class="update-card">
+        <div class="update-date mono">24 Jul 2026</div>
+        <span class="update-tag">Release</span>
+        <h4>Offline-first sync now covers outreach screenings</h4>
+        <p>Field teams can capture a full screening with zero connectivity and sync it automatically once back in range.</p>
+      </div>
+      <div class="update-card">
+        <div class="update-date mono">11 Jul 2026</div>
+        <span class="update-tag">Product</span>
+        <h4>Workflow Analytics adds cross-facility comparisons</h4>
+        <p>See wait times and patient load side-by-side across every facility in your network, not just one at a time.</p>
+      </div>
+      <div class="update-card">
+        <div class="update-date mono">02 Jul 2026</div>
+        <span class="update-tag">Notice</span>
+        <h4>Scheduled maintenance window — network gateway</h4>
+        <p>A short maintenance window is planned for the local network gateway; local access is unaffected during sync.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band" id="contact">
+  <div class="wrap">
+    <h2>See TibaMax running across your own facilities.</h2>
+    <p>We'll walk your team through a live setup on your own network — no sales script, just the system.</p>
+    <div class="cta-actions">
+      <a href="mailto:hello@tibamax.health" class="btn btn-primary">Book a demo</a>
+      <a href="#" class="btn btn-ghost">Talk to sales</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-col">
+        <div class="logo" style="margin-bottom:12px;">
+          <svg class="logo-mark" viewBox="0 0 30 30" fill="none"><rect width="30" height="30" rx="7" fill="#065F46"/><path d="M8 15h4l2-6 3 12 2-6h3" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+          TibaMax HMIS
+        </div>
+        <p style="font-size:14px; color:var(--slate-600); max-width:260px;">Multi-facility health networks, connected locally.</p>
+      </div>
+      <div class="foot-col">
+        <h5>Solutions</h5>
+        <a href="#modules">Multi-Facility EHR</a>
+        <a href="#modules">Workflow Analytics</a>
+        <a href="#modules">Inventory &amp; Billing</a>
+        <a href="#modules">Community Outreach</a>
+      </div>
+      <div class="foot-col">
+        <h5>Company</h5>
+        <a href="#">About</a>
+        <a href="#contact">Contact</a>
+        <a href="#updates">Updates</a>
+      </div>
+      <div class="foot-col">
+        <h5>Access</h5>
+        <a href="#" id="staffLoginFoot">Staff login</a>
+        <a href="#" id="patientAccessFoot">Patient access</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 TibaMax HMIS. All rights reserved.</span>
+      <span>Nairobi, Kenya</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ---- Points of integration: update these two once your app is deployed/running ----
+  const STAFF_APP_URL = "http://localhost:3000/";       // Staff Workflow login -> the Next.js/Express app
+  const PATIENT_PORTAL_URL = "patient-login.html";        // TODO: build this page
+
+  document.getElementById('staffLoginNav').href = STAFF_APP_URL;
+  document.getElementById('staffLoginFoot').href = STAFF_APP_URL;
+  document.getElementById('patientAccessNav').href = PATIENT_PORTAL_URL;
+  document.getElementById('patientAccessFoot').href = PATIENT_PORTAL_URL;
+
+  // Solutions dropdown
+  const solutionsBtn = document.getElementById('solutionsBtn');
+  const dropdown = document.getElementById('solutionsDropdown');
+  solutionsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = dropdown.classList.toggle('open');
+    solutionsBtn.classList.toggle('active', isOpen);
+    solutionsBtn.setAttribute('aria-expanded', isOpen);
+  });
+  document.addEventListener('click', () => {
+    dropdown.classList.remove('open');
+    solutionsBtn.classList.remove('active');
+    solutionsBtn.setAttribute('aria-expanded', 'false');
+  });
+
+  // Gateway toggle buttons
+  const patientBtn = document.getElementById('patientAccessBtn');
+  const staffBtn = document.getElementById('staffWorkflowBtn');
+  patientBtn.addEventListener('click', () => {
+    patientBtn.classList.add('selected');
+    staffBtn.classList.remove('selected');
+  });
+  staffBtn.addEventListener('click', () => {
+    staffBtn.classList.add('selected');
+    patientBtn.classList.remove('selected');
+  });
+</script>
+
+</body>
+</html>

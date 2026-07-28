@@ -1,4 +1,4 @@
-// AfyaTab HMIS - API Connection
+// TibaMax HMIS - API Connection
 import axios from 'axios';
 
 const API = axios.create({

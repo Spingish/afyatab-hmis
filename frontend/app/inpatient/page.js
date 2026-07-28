@@ -110,7 +110,7 @@ export default function Inpatient() {
 
   const handleAddNote = async () => {
     if (!noteForm.note) { showMsg('Note content required', 'error'); return; }
-    const user = JSON.parse(localStorage.getItem('afyatab_user')||'{}');
+    const user = JSON.parse(localStorage.getItem('tibamax_user')||'{}');
     try {
       await inpatientAPI.addNote(selectedAdmission.id, { ...noteForm, written_by: user.staff_id||1 });
       showMsg('✅ Nursing note saved');
@@ -124,7 +124,7 @@ export default function Inpatient() {
 
   const handleDischarge = async () => {
     if (!dischargeForm.discharge_diagnosis) { showMsg('Discharge diagnosis required', 'error'); return; }
-    const user = JSON.parse(localStorage.getItem('afyatab_user')||'{}');
+    const user = JSON.parse(localStorage.getItem('tibamax_user')||'{}');
     try {
       await inpatientAPI.discharge(selectedAdmission.id, { ...dischargeForm, discharged_by: user.staff_id||1 });
       showMsg(`✅ Patient discharged successfully`);

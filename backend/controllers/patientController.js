@@ -1,4 +1,4 @@
-// AfyaTab HMIS — Patient Controller
+// TibaMax HMIS — Patient Controller
 const PatientModel = require('../models/patientModel');
 
 const patientController = {

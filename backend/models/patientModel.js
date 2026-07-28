@@ -1,4 +1,4 @@
-// AfyaTab HMIS — Patient Model
+// TibaMax HMIS — Patient Model
 const pool = require('../config/db');
 
 const PatientModel = {

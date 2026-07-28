@@ -16,8 +16,8 @@ export default function Login() {
     setLoading(true); setError('');
     try {
       const r = await axios.post('/api/auth/login', form);
-      localStorage.setItem('afyatab_token', r.data.token);
-      localStorage.setItem('afyatab_user', JSON.stringify(r.data.user));
+      localStorage.setItem('tibamax_token', r.data.token);
+      localStorage.setItem('tibamax_user', JSON.stringify(r.data.user));
       router.push('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Check your credentials.');
@@ -29,12 +29,12 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 shadow-lg">A</div>
-          <h1 className="text-3xl font-bold text-white">AfyaTab HMIS</h1>
+          <h1 className="text-3xl font-bold text-white">TibaMax HMIS</h1>
           <p className="text-blue-300 text-sm mt-1">Webuye West Sub-County Hospital</p>
         </div>
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-bold text-gray-800 mb-1">Staff Login</h2>
-          <p className="text-gray-400 text-sm mb-6">Sign in to access AfyaTab HMIS</p>
+          <p className="text-gray-400 text-sm mb-6">Sign in to access TibaMax HMIS</p>
           {error && (
             <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 mb-4 text-sm text-red-700">{error}</div>
           )}
@@ -62,7 +62,7 @@ export default function Login() {
             </div>
             <button type="submit" disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition-all text-sm">
-              {loading ? 'Signing in...' : 'Sign In to AfyaTab HMIS'}
+              {loading ? 'Signing in...' : 'Sign In to TibaMax HMIS'}
             </button>
           </form>
           <div className="mt-6 pt-6 border-t border-gray-100">
@@ -73,7 +73,7 @@ export default function Login() {
             </div>
           </div>
         </div>
-        <p className="text-center text-blue-400 text-xs mt-6">AfyaTab HMIS v1.0 — Bungoma County, Kenya</p>
+        <p className="text-center text-blue-400 text-xs mt-6">TibaMax HMIS v1.0 — Bungoma County, Kenya</p>
       </div>
     </div>
   );

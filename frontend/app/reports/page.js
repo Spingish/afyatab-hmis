@@ -17,7 +17,7 @@ export default function Reports() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-gray-500 text-sm">AfyaTab HMIS — Clinical & Financial Reports</p>
+          <p className="text-gray-500 text-sm">TibaMax HMIS — Clinical & Financial Reports</p>
         </div>
         <div className="flex gap-3">
           <button className="border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:border-blue-500">📄 PDF</button>
