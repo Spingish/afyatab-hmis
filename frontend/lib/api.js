@@ -1,11 +1,49 @@
 // TibaMax HMIS - API Connection
 import axios from 'axios';
 
+// --- Global auth interceptor ---------------------------------------------
+// Attaches the JWT to every outgoing request, whether it's made through the
+// `API` instance below or via a plain `import axios from 'axios'` elsewhere
+// in the app (layout.js, dashboard page, etc.). Without this, every request
+// silently fails with 401 now that the backend requires a token on almost
+// every route.
+function attachAuthInterceptors(instance) {
+  instance.interceptors.request.use((config) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('tibamax_token') : null;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  });
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (
+        error.response?.status === 401 &&
+        typeof window !== 'undefined' &&
+        window.location.pathname !== '/login'
+      ) {
+        localStorage.removeItem('tibamax_token');
+        localStorage.removeItem('tibamax_user');
+        window.location.href = '/login';
+      }
+      return Promise.reject(error);
+    }
+  );
+}
+
+attachAuthInterceptors(axios); // plain axios usages app-wide
+
 const API = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 10000,
 });
+
+API.interceptors.request.use((config) => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('tibamax_token') : null;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+attachAuthInterceptors(API); // patientAPI, visitAPI, etc. below
 
 // Patients
 export const patientAPI = {

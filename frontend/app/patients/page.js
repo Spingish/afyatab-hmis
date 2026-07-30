@@ -1,19 +1,41 @@
-﻿'use client';
+'use client';
 import { useState, useEffect } from 'react';
 import { patientAPI } from '../../lib/api';
 import { UserPlus, Search, X, Eye, Trash2, CircleCheck, CircleAlert } from 'lucide-react';
+
+const phoneOwnershipOptions = [
+  "Personal (Patient's own phone)",
+  "Parent's Phone",
+  "Guardian's Phone",
+  "Spouse's Phone",
+  'Other',
+];
+
+const idDocumentOptions = [
+  'National ID', 'Passport', 'Birth Certificate', 'Military ID', 'Other',
+];
+
+const emptyForm = {
+  first_name:'', other_names:'', last_name:'', date_of_birth:'', gender:'Male',
+  phone:'', phone_ownership: "Personal (Patient's own phone)", email:'',
+  village:'', id_document_type:'National ID', national_id:'',
+  kin_name:'', kin_phone:'', kin_relationship:'',
+};
+
+const calcAge = (dob) => {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth)) return null;
+  const diff = Date.now() - birth.getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+};
 
 export default function Patients() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm]         = useState({
-    first_name:'', last_name:'', gender:'Male',
-    phone:'', national_id:'', date_of_birth:'',
-    county_id:39, allergies:'None',
-    kin_name:'', kin_phone:''
-  });
+  const [form, setForm]         = useState(emptyForm);
   const [msg, setMsg]     = useState('');
   const [msgOk, setMsgOk] = useState(true);
 
@@ -36,7 +58,7 @@ export default function Patients() {
       setMsgOk(true);
       setMsg(`Patient ${r.data.patient_no} registered successfully`);
       setShowForm(false);
-      setForm({ first_name:'', last_name:'', gender:'Male', phone:'', national_id:'', date_of_birth:'', county_id:39, allergies:'None', kin_name:'', kin_phone:'' });
+      setForm(emptyForm);
       load();
     } catch (err) {
       setMsgOk(false);
@@ -49,6 +71,8 @@ export default function Patients() {
     await patientAPI.delete(id);
     load();
   };
+
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
   return (
     <div>
@@ -73,35 +97,115 @@ export default function Patients() {
 
       {/* Registration Form */}
       {showForm && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
-          <h2 className="font-bold text-slate-900 mb-4">New Patient Registration</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {[
-              { label:'First Name *',   key:'first_name',   type:'text' },
-              { label:'Last Name *',    key:'last_name',    type:'text' },
-              { label:'Phone *',        key:'phone',        type:'tel'  },
-              { label:'National ID',    key:'national_id',  type:'text' },
-              { label:'Date of Birth',  key:'date_of_birth',type:'date' },
-              { label:'Next of Kin',    key:'kin_name',     type:'text' },
-              { label:'Kin Phone',      key:'kin_phone',    type:'tel'  },
-              { label:'Allergies',      key:'allergies',    type:'text' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">{f.label}</label>
-                <input type={f.type} value={form[f.key]}
-                  onChange={e => setForm({...form, [f.key]: e.target.value})}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 space-y-6">
+          <h2 className="font-bold text-slate-900">New Patient Registration</h2>
+
+          {/* Identity */}
+          <div>
+            <div className="text-xs font-bold text-teal-700 uppercase tracking-wide mb-3">Identity</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">First Name *</label>
+                <input value={form.first_name} onChange={set('first_name')}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
               </div>
-            ))}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Gender *</label>
-              <select value={form.gender} onChange={e => setForm({...form, gender: e.target.value})}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors">
-                <option>Male</option><option>Female</option><option>Other</option>
-              </select>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Middle Name</label>
+                <input value={form.other_names} onChange={set('other_names')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Last Name *</label>
+                <input value={form.last_name} onChange={set('last_name')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Date of Birth *</label>
+                <input type="date" value={form.date_of_birth} onChange={set('date_of_birth')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Gender *</label>
+                <select value={form.gender} onChange={set('gender')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors">
+                  <option>Male</option><option>Female</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Residence</label>
+                <input value={form.village} onChange={set('village')} placeholder="e.g. Webuye Town"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
             </div>
           </div>
-          <div className="flex gap-3 mt-5">
+
+          {/* Contact Information */}
+          <div>
+            <div className="text-xs font-bold text-teal-700 uppercase tracking-wide mb-3">Contact Information</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Phone Number *</label>
+                <input type="tel" value={form.phone} onChange={set('phone')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Phone Ownership *</label>
+                <select value={form.phone_ownership} onChange={set('phone_ownership')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors">
+                  {phoneOwnershipOptions.map(o => <option key={o}>{o}</option>)}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">For children, select Parent's or Guardian's Phone.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Email Address</label>
+                <input type="email" value={form.email} onChange={set('email')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+            </div>
+          </div>
+
+          {/* Identification */}
+          <div>
+            <div className="text-xs font-bold text-teal-700 uppercase tracking-wide mb-3">Identification</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Document Type</label>
+                <select value={form.id_document_type} onChange={set('id_document_type')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors">
+                  {idDocumentOptions.map(o => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Document Number</label>
+                <input value={form.national_id} onChange={set('national_id')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+            </div>
+          </div>
+
+          {/* Emergency Contact */}
+          <div>
+            <div className="text-xs font-bold text-teal-700 uppercase tracking-wide mb-3">Emergency Contact (Optional)</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Contact Name</label>
+                <input value={form.kin_name} onChange={set('kin_name')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Contact Phone</label>
+                <input type="tel" value={form.kin_phone} onChange={set('kin_phone')}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Relationship</label>
+                <input value={form.kin_relationship} onChange={set('kin_relationship')} placeholder="e.g. Mother, Spouse"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-600 transition-colors" />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
             <button onClick={handleSubmit}
               className="bg-teal-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-teal-800 transition-colors">
               Register Patient
@@ -132,42 +236,37 @@ export default function Patients() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50">
-                  {['Patient No','Name','Gender','Phone','National ID','County','Allergies','Actions'].map(h => (
+                  {['Patient No','Name','Gender / Age','Phone','Residence','Actions'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {patients.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-10 text-slate-400">No patients found</td></tr>
-                ) : patients.map(p => (
-                  <tr key={p.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-teal-700">{p.patient_no}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{p.first_name} {p.last_name}</td>
-                    <td className="px-4 py-3 text-slate-500">{p.gender}</td>
-                    <td className="px-4 py-3 text-slate-600">{p.phone}</td>
-                    <td className="px-4 py-3 text-slate-500">{p.national_id || '-'}</td>
-                    <td className="px-4 py-3 text-slate-500">{p.county_name || '-'}</td>
-                    <td className="px-4 py-3">
-                      {p.allergies && p.allergies !== 'None' ? (
-                        <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full font-medium">{p.allergies}</span>
-                      ) : (
-                        <span className="text-slate-300 text-xs">None</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button className="flex items-center gap-1 bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-teal-800 transition-colors">
-                          <Eye size={12} /> View
-                        </button>
-                        <button onClick={() => handleDelete(p.id)}
-                          className="flex items-center gap-1 bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors">
-                          <Trash2 size={12} /> Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={6} className="text-center py-10 text-slate-400">No patients found</td></tr>
+                ) : patients.map(p => {
+                  const age = calcAge(p.date_of_birth);
+                  return (
+                    <tr key={p.id} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-teal-700">{p.patient_no}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{p.first_name} {p.last_name}</td>
+                      <td className="px-4 py-3 text-slate-500">{p.gender}{age !== null ? `, ${age}y` : ''}</td>
+                      <td className="px-4 py-3 text-slate-600">{p.phone}</td>
+                      <td className="px-4 py-3 text-slate-500">{p.village || '-'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button className="flex items-center gap-1 bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-teal-800 transition-colors">
+                            <Eye size={12} /> View
+                          </button>
+                          <button onClick={() => handleDelete(p.id)}
+                            className="flex items-center gap-1 bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors">
+                            <Trash2 size={12} /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
