@@ -1,4 +1,4 @@
-// TibaMax HMIS — Patient Model
+﻿// TibaMax HMIS — Patient Model
 const pool = require('../config/db');
 
 const PatientModel = {
@@ -122,7 +122,8 @@ const PatientModel = {
   async create(data) {
     const {
       patient_no, first_name, last_name, other_names,
-      gender, date_of_birth, national_id, phone, email,
+      gender, date_of_birth, national_id, id_document_type,
+      phone, phone_ownership, email,
       county_id, village, family_account_id, relationship,
       is_family_head, blood_group, allergies, chronic_conditions,
       kin_name, kin_phone, kin_relationship, registered_by
@@ -131,18 +132,20 @@ const PatientModel = {
     const result = await pool.query(
       `INSERT INTO patients (
         patient_no, first_name, last_name, other_names,
-        gender, date_of_birth, national_id, phone, email,
+        gender, date_of_birth, national_id, id_document_type,
+        phone, phone_ownership, email,
         county_id, village, family_account_id, relationship,
         is_family_head, blood_group, allergies, chronic_conditions,
         kin_name, kin_phone, kin_relationship, registered_by
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
       ) RETURNING *`,
       [
         patient_no, first_name, last_name, other_names || null,
-        gender, date_of_birth || null, national_id || null,
-        phone, email || null, county_id || null, village || null,
+        gender, date_of_birth || null, national_id || null, id_document_type || null,
+        phone, phone_ownership || 'Personal', email || null,
+        county_id || null, village || null,
         family_account_id || null, relationship || 'Self',
         is_family_head || false, blood_group || null,
         allergies || 'None', chronic_conditions || null,

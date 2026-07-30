@@ -1,4 +1,4 @@
-// TibaMax HMIS — Patient Controller
+﻿// TibaMax HMIS — Patient Controller
 const PatientModel = require('../models/patientModel');
 
 const patientController = {
@@ -63,7 +63,8 @@ const patientController = {
     try {
       const {
         first_name, last_name, other_names, gender,
-        date_of_birth, national_id, phone, email,
+        date_of_birth, national_id, id_document_type,
+        phone, phone_ownership, email,
         county_id, village, blood_group, allergies,
         chronic_conditions, kin_name, kin_phone,
         kin_relationship, relationship, is_family_head
@@ -122,7 +123,8 @@ const patientController = {
       // Create patient
       const patient = await PatientModel.create({
         patient_no, first_name, last_name, other_names,
-        gender, date_of_birth, national_id, phone, email,
+        gender, date_of_birth, national_id, id_document_type,
+        phone, phone_ownership, email,
         county_id, village, family_account_id,
         relationship: relationship || 'Self',
         is_family_head: is_family_head !== false,

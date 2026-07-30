@@ -22,21 +22,23 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ status: 'Unhealthy', error: err.message });
   }
 });
-app.use('/api/auth',           require('./routes/auth'));
-app.use('/api/superadmin',     require('./routes/superadmin'));
-app.use('/api/dashboard',      require('./routes/dashboard'));
-app.use('/api/patients',       require('./routes/patients'));
-app.use('/api/visits',         require('./routes/visits'));
-app.use('/api/triage',         require('./routes/triage'));
-app.use('/api/consultation',   require('./routes/consultation'));
-app.use('/api/inpatient',      require('./routes/inpatient'));
-app.use('/api/staff',          require('./routes/staff'));
-app.use('/api/laboratory',     require('./routes/laboratory'));
-app.use('/api/pharmacy',       require('./routes/pharmacy'));
-app.use('/api/billing',        require('./routes/billing'));
-app.use('/api/appointments',   require('./routes/appointments'));
-app.use('/api/reports',        require('./routes/reports'));
-app.use('/api/settings',       require('./routes/settings'));
+const { verifyToken } = require('./middleware/auth');
+
+app.use('/api/auth',           require('./routes/auth')); // login stays public
+app.use('/api/superadmin',     verifyToken, require('./routes/superadmin'));
+app.use('/api/dashboard',      verifyToken, require('./routes/dashboard'));
+app.use('/api/patients',       verifyToken, require('./routes/patients'));
+app.use('/api/visits',         verifyToken, require('./routes/visits'));
+app.use('/api/triage',         verifyToken, require('./routes/triage'));
+app.use('/api/consultation',   verifyToken, require('./routes/consultation'));
+app.use('/api/inpatient',      verifyToken, require('./routes/inpatient'));
+app.use('/api/staff',          verifyToken, require('./routes/staff'));
+app.use('/api/laboratory',     verifyToken, require('./routes/laboratory'));
+app.use('/api/pharmacy',       verifyToken, require('./routes/pharmacy'));
+app.use('/api/billing',        verifyToken, require('./routes/billing'));
+app.use('/api/appointments',   verifyToken, require('./routes/appointments'));
+app.use('/api/reports',        verifyToken, require('./routes/reports'));
+app.use('/api/settings',       verifyToken, require('./routes/settings'));
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', path: req.originalUrl });
 });
