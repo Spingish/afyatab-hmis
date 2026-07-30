@@ -52,6 +52,15 @@ router.post('/login', async (req, res) => {
       [user.id]
     );
 
+    // Fetch this user's permissions (via their role)
+    const permsResult = await pool.query(
+      `SELECT p.name FROM role_permissions rp
+       JOIN permissions p ON p.id = rp.permission_id
+       WHERE rp.role_id = $1`,
+      [user.role_id]
+    );
+    const permissions = permsResult.rows.map(r => r.name);
+
     // Generate JWT token
     const token = jwt.sign(
       {
@@ -59,7 +68,8 @@ router.post('/login', async (req, res) => {
         staff_id:   user.staff_id,
         username:   user.username,
         role:       user.role_name,
-        department: user.department_name
+        department: user.department_name,
+        permissions
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
@@ -76,7 +86,8 @@ router.post('/login', async (req, res) => {
         last_name:   user.last_name,
         role:        user.role_name,
         department:  user.department_name,
-        last_login:  user.last_login
+        last_login:  user.last_login,
+        permissions
       }
     });
 

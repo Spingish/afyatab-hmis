@@ -15,4 +15,19 @@ function verifyToken(req, res, next) {
   }
 }
 
-module.exports = { verifyToken };
+// Usage: router.post('/', verifyToken, requirePermission('patient.register'), handler)
+// Must run AFTER verifyToken (needs req.user.permissions).
+function requirePermission(permission) {
+  return (req, res, next) => {
+    const perms = req.user?.permissions || [];
+    if (!perms.includes(permission)) {
+      return res.status(403).json({
+        success: false,
+        error: `Missing required permission: ${permission}`
+      });
+    }
+    next();
+  };
+}
+
+module.exports = { verifyToken, requirePermission };

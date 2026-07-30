@@ -130,7 +130,7 @@ const patientController = {
         is_family_head: is_family_head !== false,
         blood_group, allergies, chronic_conditions,
         kin_name, kin_phone, kin_relationship,
-        registered_by: req.user?.id || null
+        registered_by: req.user?.staff_id || null
       });
 
       res.status(201).json({

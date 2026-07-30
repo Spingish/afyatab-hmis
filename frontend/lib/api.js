@@ -37,12 +37,6 @@ const API = axios.create({
   headers: { 'Content-Type': 'application/json' },
   timeout: 10000,
 });
-
-API.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('tibamax_token') : null;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
 attachAuthInterceptors(API); // patientAPI, visitAPI, etc. below
 
 // Patients

@@ -3,23 +3,11 @@ const express = require('express');
 const router  = express.Router();
 const bcrypt  = require('bcryptjs');
 const pool    = require('../config/db');
+const { requirePermission } = require('../middleware/auth');
 
-// Middleware: Super Admin only
-const requireSuperAdmin = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ success: false, error: 'No token' });
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
-    if (decoded.role !== 'Super Admin') {
-      return res.status(403).json({ success: false, error: 'Super Admin access required' });
-    }
-    req.user = decoded;
-    next();
-  } catch (err) {
-    res.status(401).json({ success: false, error: 'Invalid token' });
-  }
-};
+// Note: verifyToken already ran globally for /api/superadmin (see server.js),
+// so req.user is already populated here. This just checks the permission.
+const requireSuperAdmin = requirePermission('superadmin.access');
 
 // GET /api/superadmin/overview — full system overview
 router.get('/overview', requireSuperAdmin, async (req, res) => {
