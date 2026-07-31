@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { patientAPI } from '../../lib/api';
-import { UserPlus, Search, X, Eye, Trash2, CircleCheck, CircleAlert } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { patientAPI, visitAPI } from '../../lib/api';
+import { UserPlus, Search, X, Eye, Trash2, CircleCheck, CircleAlert, PlayCircle, RotateCcw } from 'lucide-react';
 
 const phoneOwnershipOptions = [
   "Personal (Patient's own phone)",
@@ -31,6 +32,7 @@ const calcAge = (dob) => {
 };
 
 export default function Patients() {
+  const router = useRouter();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
@@ -70,6 +72,30 @@ export default function Patients() {
     if (!confirm('Delete this patient?')) return;
     await patientAPI.delete(id);
     load();
+  };
+
+  const startNewVisit = async (patient) => {
+    try {
+      const r = await visitAPI.startNew({ patient_id: patient.id, patient_type: 'Outpatient', directed_to: 'Triage' });
+      setMsgOk(true);
+      setMsg(`✅ New visit ${r.data.visit_no} started for ${patient.first_name} ${patient.last_name} — sent to Triage`);
+      router.push('/triage');
+    } catch (err) {
+      setMsgOk(false);
+      setMsg('❌ ' + (err.response?.data?.error || 'Error starting visit'));
+    }
+  };
+
+  const continueVisit = async (patient) => {
+    try {
+      const r = await visitAPI.continueVisit({ patient_id: patient.id, patient_type: 'Outpatient', directed_to: 'Triage' });
+      setMsgOk(true);
+      setMsg(`✅ Continuation visit ${r.data.visit_no} — ${r.data.visit_history?.total_visits || 0} previous visit(s) loaded`);
+      router.push('/triage');
+    } catch (err) {
+      setMsgOk(false);
+      setMsg('❌ ' + (err.response?.data?.error || 'Error starting continuation visit'));
+    }
   };
 
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
@@ -254,9 +280,18 @@ export default function Patients() {
                       <td className="px-4 py-3 text-slate-600">{p.phone}</td>
                       <td className="px-4 py-3 text-slate-500">{p.village || '-'}</td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button className="flex items-center gap-1 bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-teal-800 transition-colors">
+                        <div className="flex gap-2 flex-wrap">
+                          <button onClick={() => router.push(`/patients/${p.id}`)}
+                            className="flex items-center gap-1 bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-teal-800 transition-colors">
                             <Eye size={12} /> View
+                          </button>
+                          <button onClick={() => continueVisit(p)} title="Follow-up visit for an existing patient"
+                            className="flex items-center gap-1 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
+                            <RotateCcw size={12} /> Continue
+                          </button>
+                          <button onClick={() => startNewVisit(p)} title="Start a brand new visit"
+                            className="flex items-center gap-1 bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors">
+                            <PlayCircle size={12} /> Initiate Visit
                           </button>
                           <button onClick={() => handleDelete(p.id)}
                             className="flex items-center gap-1 bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors">
