@@ -65,7 +65,7 @@ const visitController = {
   async startNew(req, res) {
     try {
       const {
-        patient_id, patient_type,
+        patient_id, patient_type, visit_date,
         attending_doctor_id, referred_from,
         received_by, directed_to
       } = req.body;
@@ -76,15 +76,22 @@ const visitController = {
       if (!patient) {
         return res.status(404).json({ success: false, error: 'Patient not found' });
       }
+
+      const d = visit_date || new Date().toISOString().slice(0, 10);
+      const countToday = await VisitModel.countForPatientOnDate(patient_id, d);
+      if (countToday >= 2) {
+        return res.status(400).json({ success: false, error: 'Maximum of 2 visits per patient per day has already been reached.' });
+      }
+
       const visit_no = await VisitModel.generateVisitNo();
       const visit = await VisitModel.create({
-        visit_no, patient_id,
+        visit_no, patient_id, visit_date: d,
         visit_type:    'New',
         patient_type:  patient_type || 'Outpatient',
         current_stage: 'Reception',
         attending_doctor_id, referred_from,
         received_by,
-        directed_to:   directed_to || 'Triage'
+        directed_to:   directed_to || 'Reception'
       });
       res.status(201).json({
         success:  true,
@@ -100,7 +107,7 @@ const visitController = {
   async continueVisit(req, res) {
     try {
       const {
-        patient_id, patient_type,
+        patient_id, patient_type, visit_date,
         attending_doctor_id, received_by, directed_to
       } = req.body;
       if (!patient_id) {
@@ -110,16 +117,31 @@ const visitController = {
       if (!patient) {
         return res.status(404).json({ success: false, error: 'Patient not found' });
       }
+
+      const d = visit_date || new Date().toISOString().slice(0, 10);
+      const lastDate = await VisitModel.getLastVisitDate(patient_id, d);
+      const yesterday = new Date(`${d}T00:00:00Z`);
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const yStr = yesterday.toISOString().slice(0, 10);
+      const lastDateStr = lastDate ? new Date(lastDate).toISOString().slice(0, 10) : null;
+      if (lastDateStr !== yStr) {
+        return res.status(400).json({ success: false, error: 'Continue Visit is only available if the patient\'s last visit was yesterday.' });
+      }
+      const countToday = await VisitModel.countForPatientOnDate(patient_id, d);
+      if (countToday >= 2) {
+        return res.status(400).json({ success: false, error: 'Maximum of 2 visits per patient per day has already been reached.' });
+      }
+
       const lastVisit = await VisitModel.getLastVisitSummary(patient_id);
       const history   = await VisitModel.getPatientHistory(patient_id);
       const visit_no  = await VisitModel.generateVisitNo();
       const visit     = await VisitModel.create({
-        visit_no, patient_id,
+        visit_no, patient_id, visit_date: d,
         visit_type:    'Revisit',
         patient_type:  patient_type || 'Outpatient',
         current_stage: 'Reception',
         attending_doctor_id, received_by,
-        directed_to:   directed_to || 'Triage'
+        directed_to:   directed_to || 'Reception'
       });
       res.status(201).json({
         success:    true,
@@ -199,6 +221,58 @@ const visitController = {
         return res.status(404).json({ success: false, error: 'Visit not found' });
       }
       res.json({ success: true, message: 'Patient discharged successfully', visit });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  // ── Look-up page (daily front-desk workspace) ─────────────────────────
+
+  async lookup(req, res) {
+    try {
+      const { date, search, type, gender, visit_status, age_range } = req.query;
+      const d = date || new Date().toISOString().slice(0, 10);
+      const patients = await VisitModel.getLookup({
+        date: d, search, patient_type: type, gender, visit_status, age_range
+      });
+      res.json({ success: true, date: d, count: patients.length, patients });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async moveLocation(req, res) {
+    try {
+      const { location } = req.body;
+      const validLocations = [
+        'Triage', 'OPD Consultation', 'Laboratory', 'Radiology',
+        'Antenatal Care (ANC)', 'Postnatal Care & Immunization', 'Family Planning'
+      ];
+      if (!validLocations.includes(location)) {
+        return res.status(400).json({ success: false, error: `Invalid location. Must be one of: ${validLocations.join(', ')}` });
+      }
+      const existing = await VisitModel.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: 'Visit not found' });
+      }
+      if (existing.location_locked) {
+        return res.status(400).json({ success: false, error: 'Location is locked and cannot be changed once the visit has a service location set.' });
+      }
+      const visit = await VisitModel.moveLocation(req.params.id, location, req.user?.id);
+      res.json({ success: true, message: `Patient moved to ${location}`, visit });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async remove(req, res) {
+    try {
+      const existing = await VisitModel.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: 'Visit not found' });
+      }
+      await VisitModel.remove(req.params.id);
+      res.json({ success: true, message: 'Visit record deleted. Patient registration remains intact.' });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }

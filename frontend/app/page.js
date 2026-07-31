@@ -71,7 +71,7 @@ const statusBadge = (s) => {
 };
 
 const quickActions = [
-  { href:'/reception',     icon: UserPlus,      label:'Register'    },
+  { href:'/lookup',        icon: UserPlus,      label:'Look-up'     },
   { href:'/triage',        icon: ClipboardPlus, label:'Triage'      },
   { href:'/consultation',  icon: Stethoscope,   label:'Consult'     },
   { href:'/laboratory',    icon: FlaskConical,  label:'Lab'         },

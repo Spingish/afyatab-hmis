@@ -19,7 +19,7 @@ const navGroups = [
   {
     key: 'patient', label: 'Patient Management', icon: Users, section: 'PATIENT CARE',
     items: [
-      { href:'/reception',    label:'New Intake' },
+      { href:'/lookup',       label:'Look-up' },
       { href:'/patients',     label:'Patient Register (MPI)' },
       { href:'/appointments', label:'Scheduling & Booking' },
       { href:'/triage',       label:'Queue & Flow Management' },
@@ -89,7 +89,7 @@ const navGroups = [
 const sections = ['PATIENT CARE', 'OPERATIONS', 'ADMINISTRATION'];
 
 const pageTitles = {
-  '/':'Dashboard','/reception':'Reception','/patients':'Patients',
+  '/':'Dashboard','/lookup':'Look-up','/reception':'Reception','/patients':'Patients',
   '/appointments':'Appointments','/mch':'MCH Clinic',
   '/consultation':'Consultation','/laboratory':'Laboratory',
   '/pharmacy':'Pharmacy','/billing':'Billing',

@@ -10,26 +10,27 @@ const VisitModel = {
 
   async create(data) {
     const {
-      visit_no, patient_id, visit_type, patient_type,
+      visit_no, patient_id, visit_type, patient_type, visit_date,
       current_stage, attending_doctor_id, referred_from,
       received_by, directed_to
     } = data;
     const result = await pool.query(
       `INSERT INTO visits (
-        visit_no, patient_id, visit_type, patient_type,
+        visit_no, patient_id, visit_type, patient_type, visit_date,
         current_stage, attending_doctor_id, referred_from,
         received_by, directed_to, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Active')
+      ) VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10,'Active')
       RETURNING *`,
       [
         visit_no, patient_id,
         visit_type || 'New',
         patient_type || 'Outpatient',
+        visit_date || null,
         current_stage || 'Reception',
         attending_doctor_id || null,
         referred_from || null,
         received_by || null,
-        directed_to || 'Triage'
+        directed_to || 'Reception'
       ]
     );
     return result.rows[0];
@@ -167,6 +168,101 @@ const VisitModel = {
 
   async getDashboardSummary() {
     const result = await pool.query('SELECT * FROM v_today_summary');
+    return result.rows[0];
+  },
+
+  // ── Look-up page (daily front-desk workspace) ─────────────────────────
+
+  async getLookup({ date, search, patient_type, gender, visit_status, age_range } = {}) {
+    const d = date || new Date().toISOString().slice(0, 10);
+    let where = 'WHERE v.visit_date = $1';
+    const params = [d];
+    let i = 2;
+
+    if (search) {
+      where += ` AND (
+        p.first_name ILIKE $${i} OR p.last_name ILIKE $${i} OR
+        p.phone ILIKE $${i} OR p.patient_no ILIKE $${i} OR
+        p.national_id ILIKE $${i} OR v.visit_no ILIKE $${i}
+      )`;
+      params.push(`%${search}%`); i++;
+    }
+    if (patient_type && patient_type !== 'All') {
+      where += ` AND v.visit_type = $${i++}`;
+      params.push(patient_type);
+    }
+    if (gender && gender !== 'All') {
+      where += ` AND p.gender = $${i++}`;
+      params.push(gender);
+    }
+    if (visit_status && visit_status !== 'All') {
+      where += ` AND v.visit_type = $${i++}`;
+      params.push(visit_status);
+    }
+    if (age_range && age_range !== 'All') {
+      const ranges = { '0-5': [0, 5], '6-17': [6, 17], '18-35': [18, 35], '36-59': [36, 59], '60+': [60, 200] };
+      const r = ranges[age_range];
+      if (r) {
+        where += ` AND EXTRACT(YEAR FROM AGE($${i}::date, p.date_of_birth)) BETWEEN $${i + 1} AND $${i + 2}`;
+        params.push(d, r[0], r[1]);
+        i += 3;
+      }
+    }
+
+    const result = await pool.query(
+      `SELECT v.id, v.visit_no, v.visit_type, v.patient_type,
+              v.visit_time, v.visit_date, v.current_stage, v.status,
+              v.directed_to, v.location_locked,
+              p.id AS patient_id, p.patient_no, p.first_name, p.last_name,
+              p.phone, p.gender, p.date_of_birth,
+              EXTRACT(YEAR FROM AGE($1::date, p.date_of_birth))::int AS age,
+              (SELECT COUNT(*) FROM visits pv
+               WHERE pv.patient_id = v.patient_id AND pv.visit_date = $1) AS visits_today
+       FROM visits v
+       JOIN patients p ON p.id = v.patient_id
+       ${where}
+       ORDER BY v.visit_time ASC`,
+      params
+    );
+    return result.rows;
+  },
+
+  async countForPatientOnDate(patient_id, date) {
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM visits WHERE patient_id = $1 AND visit_date = $2`,
+      [patient_id, date]
+    );
+    return result.rows[0].count;
+  },
+
+  async getLastVisitDate(patient_id, beforeDate) {
+    const result = await pool.query(
+      `SELECT visit_date FROM visits
+       WHERE patient_id = $1 AND visit_date < $2
+       ORDER BY visit_date DESC LIMIT 1`,
+      [patient_id, beforeDate]
+    );
+    return result.rows[0]?.visit_date || null;
+  },
+
+  async moveLocation(id, location, staff_id) {
+    const result = await pool.query(
+      `UPDATE visits SET directed_to = $1, location_locked = TRUE, updated_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [location, id]
+    );
+    if (result.rows[0]) {
+      await pool.query(
+        `INSERT INTO visit_stage_log (visit_id, to_stage, moved_by, notes)
+         VALUES ($1, $2, $3, 'Moved via Look-up')`,
+        [id, location, staff_id || null]
+      );
+    }
+    return result.rows[0];
+  },
+
+  async remove(id) {
+    const result = await pool.query('DELETE FROM visits WHERE id = $1 RETURNING id', [id]);
     return result.rows[0];
   }
 
