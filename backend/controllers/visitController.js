@@ -91,9 +91,8 @@ const visitController = {
 
       const d = visit_date || new Date().toISOString().slice(0, 10);
       const seq = await VisitModel.getNextVisitSequence(patient_id);
-      const visit_no = await VisitModel.generateVisitNo();
-      const visit = await VisitModel.create({
-        visit_no, patient_id, visit_date: d,
+      const visit = await VisitModel.createWithRetry({
+        patient_id, visit_date: d,
         visit_type:    'New',
         patient_type:  patient_type || 'Outpatient',
         current_stage: 'Reception',
@@ -160,9 +159,8 @@ const visitController = {
           }
         }
         const seq = await VisitModel.getNextVisitSequence(patient_id);
-        const visit_no = await VisitModel.generateVisitNo();
-        visit = await VisitModel.create({
-          visit_no, patient_id, visit_date: d,
+        visit = await VisitModel.createWithRetry({
+          patient_id, visit_date: d,
           visit_type:    'Revisit',
           patient_type:  patient_type || 'Outpatient',
           current_stage: 'Reception',

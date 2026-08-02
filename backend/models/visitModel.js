@@ -8,6 +8,27 @@ const VisitModel = {
     return result.rows[0].visit_no;
   },
 
+  // Generates a visit_no and inserts, retrying with a freshly generated
+  // number if it collides (visits_visit_no_key). MAX-based generation
+  // fixes the common gap-from-deletion case, but two truly simultaneous
+  // requests can still race — this is the backstop for that narrow window.
+  async createWithRetry(dataWithoutVisitNo, maxAttempts = 5) {
+    let lastErr;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const visit_no = await this.generateVisitNo();
+      try {
+        return await this.create({ ...dataWithoutVisitNo, visit_no });
+      } catch (err) {
+        if (err.code === '23505' && err.constraint === 'visits_visit_no_key') {
+          lastErr = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr;
+  },
+
   async create(data) {
     const {
       visit_no, patient_id, visit_type, patient_type, visit_date,
