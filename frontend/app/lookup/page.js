@@ -19,8 +19,6 @@ const AGE_RANGES = [
   { value: '36-59', label: '36–59' },
   { value: '60+',   label: '60+' },
 ];
-const MAX_VISITS_PER_DAY = 2;
-
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const formatTime = (t) => {
@@ -117,25 +115,44 @@ export default function LookupPage() {
   };
 
   // ── Actions ──────────────────────────────────────────────────────────
+  const [busyId, setBusyId] = useState(null);
+  const genKey = () => (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+
   const doInitiate = async (row) => {
     setOpenMenu(null);
+    if (busyId === row.id) return; // guard against a physical double-click
+    setBusyId(row.id);
     try {
-      await visitAPI.startNew({ patient_id: row.patient_id, patient_type: 'Outpatient', visit_date: dateVisited });
+      await visitAPI.startNew({
+        patient_id: row.patient_id, patient_type: 'Outpatient',
+        visit_date: dateVisited, idempotency_key: genKey()
+      });
       showMsg(`✅ New visit initiated for ${row.first_name} ${row.last_name}`);
       load();
     } catch (err) {
       showMsg('❌ ' + (err.response?.data?.error || 'Could not initiate visit'), 'error');
+    } finally {
+      setBusyId(null);
     }
   };
 
   const doContinue = async (row) => {
     setOpenMenu(null);
+    if (busyId === row.id) return;
+    setBusyId(row.id);
     try {
-      await visitAPI.continueVisit({ patient_id: row.patient_id, patient_type: 'Outpatient', visit_date: dateVisited });
-      showMsg(`✅ Visit continued for ${row.first_name} ${row.last_name}`);
+      const r = await visitAPI.continueVisit({
+        patient_id: row.patient_id, patient_type: 'Outpatient',
+        visit_date: dateVisited, idempotency_key: genKey()
+      });
+      showMsg(r.data.continued_existing_encounter
+        ? `✅ Continuing existing visit for ${row.first_name} ${row.last_name}`
+        : `✅ New visit (Revisit) started for ${row.first_name} ${row.last_name}`);
       load();
     } catch (err) {
       showMsg('❌ ' + (err.response?.data?.error || 'Could not continue visit'), 'error');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -208,8 +225,8 @@ export default function LookupPage() {
           </div>
           <div className="flex items-center gap-1 text-sm text-slate-600 pb-2.5">
             <span className="font-bold text-lg text-slate-800">{rows.length}</span>
-            <span>Today's Visits <span className="text-slate-400">/ {MAX_VISITS_PER_DAY} per patient</span></span>
-            <Info size={14} className="text-slate-400" title="Maximum of 2 visits per patient per day" />
+            <span>Encounters Today</span>
+            <Info size={14} className="text-slate-400" title="A patient may legitimately have more than one encounter in a day" />
           </div>
           <button onClick={() => setShowRegForm(true)}
             className="flex items-center gap-1.5 bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors">
@@ -297,26 +314,32 @@ export default function LookupPage() {
             <table className="w-full text-sm min-w-[1100px]">
               <thead>
                 <tr className="bg-teal-700 text-white">
-                  {['#', 'Time', 'Visit No', 'Patient', 'Phone', 'Age / Gender', 'Type', 'Stage / Location', 'Visits Today', 'Actions'].map(h => (
+                  {['#', 'Time', 'Visit No', 'Patient', 'Phone', 'Age / Gender', 'Type', 'Stage / Location', 'Encounters Today', 'Actions'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((row, idx) => (
-                  <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <tr key={row.id} className={`border-t border-slate-100 hover:bg-slate-50 ${!row.has_visit_today ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-4 py-3 text-slate-400">{(page - 1) * rowsPerPage + idx + 1}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{formatTime(row.visit_time)}</td>
-                    <td className="px-4 py-3 font-semibold text-teal-700 whitespace-nowrap">{row.visit_no}</td>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                      {row.has_visit_today ? formatTime(row.visit_time) : '—'}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-teal-700 whitespace-nowrap">
+                      {row.has_visit_today ? row.visit_no : (
+                        <span className="text-xs font-medium text-amber-600 bg-amber-100 px-2 py-1 rounded-full">Not visited today</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{row.first_name} {row.last_name}</div>
                       <div className="text-xs text-slate-400">{row.patient_no}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{row.phone}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{row.age ?? '—'} / {row.gender}</td>
-                    <td className="px-4 py-3">{typeBadge(row.visit_type)}</td>
-                    <td className="px-4 py-3">{locationBadge(row.directed_to)}</td>
-                    <td className="px-4 py-3 text-center whitespace-nowrap">{row.visits_today} / {MAX_VISITS_PER_DAY}</td>
+                    <td className="px-4 py-3">{row.has_visit_today ? typeBadge(row.visit_type) : <span className="text-xs text-slate-400">—</span>}</td>
+                    <td className="px-4 py-3">{row.has_visit_today ? locationBadge(row.directed_to) : <span className="text-xs text-slate-400">—</span>}</td>
+                    <td className="px-4 py-3 text-center whitespace-nowrap">{row.visits_today}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                         <button onClick={() => router.push(`/patients/${row.patient_id}`)}
@@ -329,7 +352,7 @@ export default function LookupPage() {
                           <button
                             onClick={() => setOpenMenu(openMenu?.id === row.id && openMenu.type === 'initiate' ? null : { id: row.id, type: 'initiate' })}
                             className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-                            Continue / Initiate Visit <ChevronDown size={13} />
+                            {row.has_visit_today ? 'Continue / Initiate Visit' : 'Initiate Visit'} <ChevronDown size={13} />
                           </button>
                           {openMenu?.id === row.id && openMenu.type === 'initiate' && (
                             <div className="absolute z-40 mt-1 right-0 w-64 bg-white border border-slate-200 rounded-lg shadow-xl p-1">
@@ -342,43 +365,48 @@ export default function LookupPage() {
                               <button onClick={() => doContinue(row)}
                                 className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-50">
                                 <div className="text-sm font-medium">Continue Previous Visit</div>
-                                <div className="text-xs text-slate-400">Only available if last visit was yesterday</div>
+                                <div className="text-xs text-slate-400">Within the window: continues the same visit. After it: starts a new one (Revisit)</div>
                               </button>
                             </div>
                           )}
                         </div>
 
-                        {/* Move to */}
-                        <div className="relative">
-                          <button
-                            disabled={row.location_locked}
-                            onClick={() => setOpenMenu(openMenu?.id === row.id && openMenu.type === 'move' ? null : { id: row.id, type: 'move' })}
-                            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium ${
-                              row.location_locked
-                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                : 'bg-green-600 text-white hover:bg-green-700'
-                            }`}
-                            title={row.location_locked ? 'Location is locked and cannot be changed' : 'Move to a service location'}>
-                            Move to <ChevronDown size={13} />
-                          </button>
-                          {openMenu?.id === row.id && openMenu.type === 'move' && !row.location_locked && (
-                            <div className="absolute z-40 mt-1 right-0 w-56 bg-white border border-slate-200 rounded-lg shadow-xl p-1">
-                              <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 uppercase">Select Service Location</div>
-                              {SERVICE_LOCATIONS.map(loc => (
-                                <button key={loc} onClick={() => doMove(row, loc)}
-                                  className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-slate-50">
-                                  {loc}
-                                </button>
-                              ))}
+                        {row.has_visit_today && (
+                          <>
+                            {/* Move to */}
+                            <div className="relative">
+                              <button
+                                disabled={row.location_locked}
+                                onClick={() => setOpenMenu(openMenu?.id === row.id && openMenu.type === 'move' ? null : { id: row.id, type: 'move' })}
+                                className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium ${
+                                  row.location_locked
+                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    : 'bg-green-600 text-white hover:bg-green-700'
+                                }`}
+                                title={row.location_locked ? 'This visit has been discharged/completed' : 'Move to a service location'}>
+                                Move to <ChevronDown size={13} />
+                              </button>
+                              {openMenu?.id === row.id && openMenu.type === 'move' && !row.location_locked && (
+                                <div className="absolute z-40 mt-1 right-0 w-56 bg-white border border-slate-200 rounded-lg shadow-xl p-1">
+                                  <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 uppercase">Select Service Location</div>
+                                  <p className="px-3 pb-1 text-[10px] text-slate-400">Can be changed as many times as needed while this visit is active.</p>
+                                  {SERVICE_LOCATIONS.map(loc => (
+                                    <button key={loc} onClick={() => doMove(row, loc)}
+                                      className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-slate-50">
+                                      {loc}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
 
-                        {/* Delete */}
-                        <button onClick={() => setConfirmDeleteId(row.id)}
-                          className="p-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50">
-                          <Trash2 size={14} />
-                        </button>
+                            {/* Delete */}
+                            <button onClick={() => setConfirmDeleteId(row.id)}
+                              className="p-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50">
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -432,10 +460,11 @@ export default function LookupPage() {
           <h3 className="font-bold text-xs uppercase text-slate-500 mb-2">Key Rules</h3>
           <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside">
             <li>Date Visited defaults to Today.</li>
-            <li>Maximum of 2 visits per patient per day.</li>
-            <li>Continue Visit is allowed only if last visit was yesterday.</li>
-            <li>Initiate Visit creates a new visit and places patient in the selected service queue.</li>
-            <li>After Move to is selected and visit initiated/continued, location cannot be changed.</li>
+            <li>A patient may have more than one legitimate encounter per day — there is no maximum.</li>
+            <li>Continue Visit within the continuation window (default 6h) resumes the same encounter — no new visit is created.</li>
+            <li>Continue Visit after the window opens a new, linked encounter (Revisit) instead.</li>
+            <li>Initiate Visit always creates a new encounter and places the patient in the selected service queue.</li>
+            <li>Move to can be used repeatedly while a visit is active — it only locks once the visit is discharged/completed.</li>
             <li>Delete removes the visit record only. Patient registration remains intact.</li>
             <li>All actions are role-based and logged in the audit trail.</li>
           </ol>
@@ -448,8 +477,8 @@ export default function LookupPage() {
           </div>
           <div>
             <div className="text-sm font-semibold">Continue Previous Visit</div>
-            <p className="text-xs text-slate-500">Carries forward previous triage, diagnosis, notes, treatments and prescriptions as history.</p>
-            <p className="text-xs text-teal-600 mt-1">Only available if last visit was previous day.</p>
+            <p className="text-xs text-slate-500">Within the continuation window, resumes the same encounter (same visit number). After the window, starts a new linked encounter (Revisit) instead — carrying forward triage, diagnosis, notes, treatments and prescriptions as history.</p>
+            <p className="text-xs text-teal-600 mt-1">No daily limit — a patient may legitimately be seen more than once a day.</p>
           </div>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -457,13 +486,13 @@ export default function LookupPage() {
           <ul className="text-xs text-slate-600 space-y-1">
             {SERVICE_LOCATIONS.map(l => <li key={l}>{l}</li>)}
           </ul>
-          <p className="text-xs text-teal-600 mt-2">Once initiated/continued, location cannot be changed.</p>
+          <p className="text-xs text-teal-600 mt-2">Can be changed as many times as needed while the visit is active — locks only once discharged/completed.</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <h3 className="font-bold text-xs uppercase text-slate-500 mb-2">Actions Legend</h3>
           <ul className="text-xs text-slate-600 space-y-2">
             <li><strong>View</strong> — view patient details, visit history and demographics.</li>
-            <li><strong>Initiate/Continue Visit</strong> — start a new visit or continue yesterday's visit.</li>
+            <li><strong>Initiate/Continue Visit</strong> — start a new encounter, or resume/continue the existing one depending on the continuation window.</li>
             <li><strong>Move to</strong> — refer patient to a specific service location.</li>
             <li><strong className="text-red-600">Delete Visit</strong> — deletes visit record only. Cannot be undone.</li>
           </ul>

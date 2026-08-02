@@ -53,8 +53,11 @@ router.post('/', async (req, res) => {
         error: 'first_name, last_name and role_id are required'
       });
     }
-    const count = await pool.query('SELECT COUNT(*) FROM staff');
-    const staff_no = 'S' + String(parseInt(count.rows[0].count) + 1).padStart(3, '0');
+    const maxNo = await pool.query(
+      `SELECT COALESCE(MAX(CAST(SUBSTRING(staff_no FROM 2) AS INT)), 0) AS max_no
+       FROM staff WHERE staff_no ~ '^S[0-9]+$'`
+    );
+    const staff_no = 'S' + String(maxNo.rows[0].max_no + 1).padStart(3, '0');
     const result = await pool.query(
       `INSERT INTO staff (
         staff_no, first_name, last_name, gender, date_of_birth,

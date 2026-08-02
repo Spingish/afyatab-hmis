@@ -67,7 +67,7 @@ const visitController = {
       const {
         patient_id, patient_type, visit_date,
         attending_doctor_id, referred_from,
-        received_by, directed_to
+        received_by, directed_to, idempotency_key
       } = req.body;
       if (!patient_id) {
         return res.status(400).json({ success: false, error: 'patient_id is required' });
@@ -77,12 +77,20 @@ const visitController = {
         return res.status(404).json({ success: false, error: 'Patient not found' });
       }
 
-      const d = visit_date || new Date().toISOString().slice(0, 10);
-      const countToday = await VisitModel.countForPatientOnDate(patient_id, d);
-      if (countToday >= 2) {
-        return res.status(400).json({ success: false, error: 'Maximum of 2 visits per patient per day has already been reached.' });
+      // A double-click or a browser network retry must not create two
+      // encounters for the same submitted action.
+      if (idempotency_key) {
+        const dupe = await VisitModel.findByIdempotencyKey(idempotency_key);
+        if (dupe) {
+          return res.status(200).json({
+            success: true, message: 'Visit already created (duplicate request ignored)',
+            visit_no: dupe.visit_no, visit: dupe
+          });
+        }
       }
 
+      const d = visit_date || new Date().toISOString().slice(0, 10);
+      const seq = await VisitModel.getNextVisitSequence(patient_id);
       const visit_no = await VisitModel.generateVisitNo();
       const visit = await VisitModel.create({
         visit_no, patient_id, visit_date: d,
@@ -91,7 +99,10 @@ const visitController = {
         current_stage: 'Reception',
         attending_doctor_id, referred_from,
         received_by,
-        directed_to:   directed_to || 'Reception'
+        directed_to:   directed_to || 'Reception',
+        visit_sequence:        seq,
+        visit_classification:  seq === 1 ? 'FIRST_VISIT' : 'REVISIT',
+        idempotency_key:       idempotency_key || null
       });
       res.status(201).json({
         success:  true,
@@ -108,7 +119,7 @@ const visitController = {
     try {
       const {
         patient_id, patient_type, visit_date,
-        attending_doctor_id, received_by, directed_to
+        attending_doctor_id, received_by, directed_to, idempotency_key
       } = req.body;
       if (!patient_id) {
         return res.status(400).json({ success: false, error: 'patient_id is required' });
@@ -118,36 +129,64 @@ const visitController = {
         return res.status(404).json({ success: false, error: 'Patient not found' });
       }
 
-      const d = visit_date || new Date().toISOString().slice(0, 10);
-      const lastDate = await VisitModel.getLastVisitDate(patient_id, d);
-      const yesterday = new Date(`${d}T00:00:00Z`);
-      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-      const yStr = yesterday.toISOString().slice(0, 10);
-      const lastDateStr = lastDate ? new Date(lastDate).toISOString().slice(0, 10) : null;
-      if (lastDateStr !== yStr) {
-        return res.status(400).json({ success: false, error: 'Continue Visit is only available if the patient\'s last visit was yesterday.' });
+      const lastVisitRow = await VisitModel.getMostRecentVisit(patient_id);
+      if (!lastVisitRow) {
+        return res.status(400).json({ success: false, error: 'Continue Visit requires an existing previous visit. Use Initiate New Visit instead.' });
       }
-      const countToday = await VisitModel.countForPatientOnDate(patient_id, d);
-      if (countToday >= 2) {
-        return res.status(400).json({ success: false, error: 'Maximum of 2 visits per patient per day has already been reached.' });
+
+      const windowHours = await VisitModel.getContinuationWindowHours();
+      const hoursSinceLast = (Date.now() - new Date(lastVisitRow.ts).getTime()) / (1000 * 60 * 60);
+      const d = visit_date || new Date().toISOString().slice(0, 10);
+
+      let visit, isNewEncounter;
+
+      if (hoursSinceLast < windowHours) {
+        // Still inside the continuation window — this is the SAME
+        // encounter/episode continuing, not a new one. No new row,
+        // no new visit_no; just reopen it and clear the location lock
+        // so staff can direct the patient to the next service.
+        visit = await VisitModel.reactivateForContinuation(lastVisitRow.id);
+        isNewEncounter = false;
+      } else {
+        // Outside the window — a legitimate new encounter (Revisit),
+        // linked back to the prior one for longitudinal history.
+        if (idempotency_key) {
+          const dupe = await VisitModel.findByIdempotencyKey(idempotency_key);
+          if (dupe) {
+            return res.status(200).json({
+              success: true, message: 'Visit already created (duplicate request ignored)',
+              visit_no: dupe.visit_no, visit: dupe
+            });
+          }
+        }
+        const seq = await VisitModel.getNextVisitSequence(patient_id);
+        const visit_no = await VisitModel.generateVisitNo();
+        visit = await VisitModel.create({
+          visit_no, patient_id, visit_date: d,
+          visit_type:    'Revisit',
+          patient_type:  patient_type || 'Outpatient',
+          current_stage: 'Reception',
+          attending_doctor_id, received_by,
+          directed_to:   directed_to || 'Reception',
+          visit_sequence:       seq,
+          visit_classification: 'REVISIT',
+          related_visit_id:     lastVisitRow.id,
+          idempotency_key:      idempotency_key || null
+        });
+        isNewEncounter = true;
       }
 
       const lastVisit = await VisitModel.getLastVisitSummary(patient_id);
       const history   = await VisitModel.getPatientHistory(patient_id);
-      const visit_no  = await VisitModel.generateVisitNo();
-      const visit     = await VisitModel.create({
-        visit_no, patient_id, visit_date: d,
-        visit_type:    'Revisit',
-        patient_type:  patient_type || 'Outpatient',
-        current_stage: 'Reception',
-        attending_doctor_id, received_by,
-        directed_to:   directed_to || 'Reception'
-      });
-      res.status(201).json({
+
+      res.status(isNewEncounter ? 201 : 200).json({
         success:    true,
-        message:    `Continuation visit started for ${patient.first_name} ${patient.last_name}`,
+        message:    isNewEncounter
+          ? `New visit (Revisit) started for ${patient.first_name} ${patient.last_name}`
+          : `Continuing existing visit ${visit.visit_no} for ${patient.first_name} ${patient.last_name}`,
         visit_no:   visit.visit_no,
-        visit_type: 'Revisit',
+        visit_type: visit.visit_type,
+        continued_existing_encounter: !isNewEncounter,
         visit,
         patient_summary: {
           patient_no:         patient.patient_no,
@@ -232,9 +271,37 @@ const visitController = {
     try {
       const { date, search, type, gender, visit_status, age_range } = req.query;
       const d = date || new Date().toISOString().slice(0, 10);
-      const patients = await VisitModel.getLookup({
+      const visited = await VisitModel.getLookup({
         date: d, search, patient_type: type, gender, visit_status, age_range
       });
+
+      // Only look for not-yet-visited matches when the user is actually
+      // searching for someone — otherwise "today's list" would balloon to
+      // include the entire patient register.
+      let notYetVisited = [];
+      if (search && (!visit_status || visit_status === 'All')) {
+        const found = await VisitModel.searchPatientsWithoutVisit({ date: d, search, gender, age_range });
+        notYetVisited = found.map(p => ({
+          id: `novisit-${p.patient_id}`,
+          visit_no: null,
+          visit_type: 'New',
+          patient_type: null,
+          visit_time: null,
+          visit_date: d,
+          current_stage: null,
+          status: null,
+          directed_to: null,
+          location_locked: false,
+          visits_today: 0,
+          has_visit_today: false,
+          ...p
+        }));
+      }
+
+      const patients = [
+        ...visited.map(p => ({ ...p, has_visit_today: true })),
+        ...notYetVisited
+      ];
       res.json({ success: true, date: d, count: patients.length, patients });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -255,8 +322,8 @@ const visitController = {
       if (!existing) {
         return res.status(404).json({ success: false, error: 'Visit not found' });
       }
-      if (existing.location_locked) {
-        return res.status(400).json({ success: false, error: 'Location is locked and cannot be changed once the visit has a service location set.' });
+      if (existing.location_locked || existing.status !== 'Active') {
+        return res.status(400).json({ success: false, error: 'This visit has been discharged/completed and its location can no longer be changed.' });
       }
       const visit = await VisitModel.moveLocation(req.params.id, location, req.user?.id);
       res.json({ success: true, message: `Patient moved to ${location}`, visit });
@@ -270,6 +337,13 @@ const visitController = {
       const existing = await VisitModel.findById(req.params.id);
       if (!existing) {
         return res.status(404).json({ success: false, error: 'Visit not found' });
+      }
+      const hasClinical = await VisitModel.hasClinicalRecords(req.params.id);
+      if (hasClinical) {
+        return res.status(400).json({
+          success: false,
+          error: 'This visit has clinical or billing records attached (triage, consultation, lab, prescription, admission or invoice) and cannot be deleted.'
+        });
       }
       await VisitModel.remove(req.params.id);
       res.json({ success: true, message: 'Visit record deleted. Patient registration remains intact.' });

@@ -12,14 +12,16 @@ const VisitModel = {
     const {
       visit_no, patient_id, visit_type, patient_type, visit_date,
       current_stage, attending_doctor_id, referred_from,
-      received_by, directed_to
+      received_by, directed_to,
+      visit_sequence, visit_classification, related_visit_id, idempotency_key
     } = data;
     const result = await pool.query(
       `INSERT INTO visits (
         visit_no, patient_id, visit_type, patient_type, visit_date,
         current_stage, attending_doctor_id, referred_from,
-        received_by, directed_to, status
-      ) VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10,'Active')
+        received_by, directed_to, status,
+        visit_sequence, visit_classification, related_visit_id, idempotency_key
+      ) VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10,'Active',$11,$12,$13,$14)
       RETURNING *`,
       [
         visit_no, patient_id,
@@ -30,10 +32,64 @@ const VisitModel = {
         attending_doctor_id || null,
         referred_from || null,
         received_by || null,
-        directed_to || 'Reception'
+        directed_to || 'Reception',
+        visit_sequence || null,
+        visit_classification || null,
+        related_visit_id || null,
+        idempotency_key || null
       ]
     );
     return result.rows[0];
+  },
+
+  async findByIdempotencyKey(key) {
+    if (!key) return null;
+    const result = await pool.query('SELECT * FROM visits WHERE idempotency_key = $1', [key]);
+    return result.rows[0] || null;
+  },
+
+  // The real chronological sequence number for this patient's next
+  // encounter — derived, never typed by staff. 1 = FIRST_VISIT,
+  // anything after = REVISIT.
+  async getNextVisitSequence(patient_id) {
+    const result = await pool.query(
+      `SELECT COALESCE(MAX(visit_sequence), COUNT(*)::int, 0) AS max_seq
+       FROM visits WHERE patient_id = $1`,
+      [patient_id]
+    );
+    return (result.rows[0].max_seq || 0) + 1;
+  },
+
+  // Most recent visit for a patient, any date — used to decide
+  // continuation-of-same-encounter vs. a genuinely new encounter.
+  async getMostRecentVisit(patient_id) {
+    const result = await pool.query(
+      `SELECT *, (visit_date + visit_time) AS ts FROM visits
+       WHERE patient_id = $1
+       ORDER BY visit_date DESC, visit_time DESC LIMIT 1`,
+      [patient_id]
+    );
+    return result.rows[0] || null;
+  },
+
+  // Reactivate an existing visit for same-encounter continuation
+  // (within the continuation window) — no new row, no new visit_no.
+  // Also clears the location lock so staff can direct the patient to
+  // the next service within the same encounter (e.g. Lab → Pharmacy).
+  async reactivateForContinuation(id) {
+    const result = await pool.query(
+      `UPDATE visits SET status = 'Active', location_locked = FALSE, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    return result.rows[0];
+  },
+
+  async getContinuationWindowHours() {
+    const result = await pool.query(
+      'SELECT encounter_continuation_window_hours FROM hospital_settings LIMIT 1'
+    );
+    return result.rows[0]?.encounter_continuation_window_hours ?? 6;
   },
 
   async findById(id) {
@@ -159,7 +215,7 @@ const VisitModel = {
       `UPDATE visits SET
         status='Discharged', discharge_date=CURRENT_DATE,
         discharge_notes=$1, discharged_by=$2,
-        current_stage='Discharged', updated_at=NOW()
+        current_stage='Discharged', location_locked=TRUE, updated_at=NOW()
        WHERE id=$3 RETURNING *`,
       [discharge_notes || null, discharged_by || null, id]
     );
@@ -213,6 +269,7 @@ const VisitModel = {
       `SELECT v.id, v.visit_no, v.visit_type, v.patient_type,
               v.visit_time, v.visit_date, v.current_stage, v.status,
               v.directed_to, v.location_locked,
+              v.visit_sequence, v.visit_classification,
               p.id AS patient_id, p.patient_no, p.first_name, p.last_name,
               p.phone, p.gender, p.date_of_birth,
               EXTRACT(YEAR FROM AGE($1::date, p.date_of_birth))::int AS age,
@@ -222,6 +279,48 @@ const VisitModel = {
        JOIN patients p ON p.id = v.patient_id
        ${where}
        ORDER BY v.visit_time ASC`,
+      params
+    );
+    return result.rows;
+  },
+
+  // Patients matching a search term who have NOT yet been visited on the
+  // given date — lets front-desk staff find and Initiate a visit for someone
+  // who hasn't checked in today, not just re-list today's existing rows.
+  async searchPatientsWithoutVisit({ date, search, gender, age_range } = {}) {
+    if (!search) return [];
+    const d = date || new Date().toISOString().slice(0, 10);
+    let where = `WHERE (
+      p.first_name ILIKE $1 OR p.last_name ILIKE $1 OR
+      p.phone ILIKE $1 OR p.patient_no ILIKE $1 OR p.national_id ILIKE $1
+    ) AND NOT EXISTS (
+      SELECT 1 FROM visits v WHERE v.patient_id = p.id AND v.visit_date = $2
+    )`;
+    const params = [`%${search}%`, d];
+    let i = 3;
+
+    if (gender && gender !== 'All') {
+      where += ` AND p.gender = $${i++}`;
+      params.push(gender);
+    }
+    if (age_range && age_range !== 'All') {
+      const ranges = { '0-5': [0, 5], '6-17': [6, 17], '18-35': [18, 35], '36-59': [36, 59], '60+': [60, 200] };
+      const r = ranges[age_range];
+      if (r) {
+        where += ` AND EXTRACT(YEAR FROM AGE($${i}::date, p.date_of_birth)) BETWEEN $${i + 1} AND $${i + 2}`;
+        params.push(d, r[0], r[1]);
+        i += 3;
+      }
+    }
+
+    const result = await pool.query(
+      `SELECT p.id AS patient_id, p.patient_no, p.first_name, p.last_name,
+              p.phone, p.gender, p.date_of_birth,
+              EXTRACT(YEAR FROM AGE($2::date, p.date_of_birth))::int AS age
+       FROM patients p
+       ${where}
+       ORDER BY p.first_name ASC
+       LIMIT 20`,
       params
     );
     return result.rows;
@@ -245,9 +344,19 @@ const VisitModel = {
     return result.rows[0]?.visit_date || null;
   },
 
+  async getLastVisitTimestamp(patient_id) {
+    const result = await pool.query(
+      `SELECT (visit_date + visit_time) AS ts FROM visits
+       WHERE patient_id = $1
+       ORDER BY visit_date DESC, visit_time DESC LIMIT 1`,
+      [patient_id]
+    );
+    return result.rows[0]?.ts || null;
+  },
+
   async moveLocation(id, location, staff_id) {
     const result = await pool.query(
-      `UPDATE visits SET directed_to = $1, location_locked = TRUE, updated_at = NOW()
+      `UPDATE visits SET directed_to = $1, updated_at = NOW()
        WHERE id = $2 RETURNING *`,
       [location, id]
     );
@@ -261,9 +370,43 @@ const VisitModel = {
     return result.rows[0];
   },
 
+  // Tables that hold real clinical/financial work tied to a visit. If any of
+  // these have rows for this visit, the visit itself must not be deleted —
+  // only the harmless stage-log audit trail is safe to clear automatically.
+  async hasClinicalRecords(id) {
+    const result = await pool.query(
+      `SELECT
+        EXISTS(SELECT 1 FROM triage             WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM consultations      WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM lab_requests       WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM prescriptions      WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM admissions         WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM anc_register       WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM pnc_register       WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM fp_register        WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM cwc_register       WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM immunization_log   WHERE visit_id = $1) OR
+        EXISTS(SELECT 1 FROM invoices           WHERE visit_id = $1)
+        AS has_records`,
+      [id]
+    );
+    return result.rows[0].has_records;
+  },
+
   async remove(id) {
-    const result = await pool.query('DELETE FROM visits WHERE id = $1 RETURNING id', [id]);
-    return result.rows[0];
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM visit_stage_log WHERE visit_id = $1', [id]);
+      const result = await client.query('DELETE FROM visits WHERE id = $1 RETURNING id', [id]);
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
 };
