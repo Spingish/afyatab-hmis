@@ -101,6 +101,7 @@ export const billingAPI = {
   getPending:     () => API.get('/billing/pending'),
   getRevenue:     () => API.get('/billing/revenue'),
   getById:        (id) => API.get(`/billing/${id}`),
+  getVisitCharges: (visitId) => API.get(`/billing/charges/visit/${visitId}`),
   create:         (data) => API.post('/billing', data),
   recordPayment:  (id, data) => API.post(`/billing/${id}/payment`, data),
   getPaymentMethods: () => API.get('/billing/meta/payment-methods'),

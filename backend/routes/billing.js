@@ -112,11 +112,12 @@ router.post('/', async (req, res) => {
       await pool.query(
         `INSERT INTO invoice_items (
           invoice_id, service_type, description,
-          quantity, unit_price
-        ) VALUES ($1,$2,$3,$4,$5)`,
+          quantity, unit_price, source_table, source_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [
           inv.rows[0].id, item.service_type,
-          item.description, item.quantity || 1, item.unit_price
+          item.description, item.quantity || 1, item.unit_price,
+          item.source_table || null, item.source_id || null
         ]
       );
     }
@@ -204,5 +205,172 @@ router.get('/meta/payment-methods', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+// GET aggregated unbilled charges for a visit (Phase 1: charge aggregation)
+// Excludes MCH/maternity entirely — those are SHA-capitated or a
+// separate SHA claim, never a patient invoice item.
+router.get('/charges/visit/:visitId', async (req, res) => {
+  try {
+    const visitId = req.params.visitId;
+    const charges = [];
 
+    // 1. Consultation Fee — one per consultation on this visit
+    const consultations = await pool.query(
+      `SELECT c.id FROM consultations c
+       WHERE c.visit_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM invoice_items ii
+         WHERE ii.source_table = 'consultations' AND ii.source_id = c.id
+       )`,
+      [visitId]
+    );
+    if (consultations.rows.length) {
+      const fee = await pool.query(
+        `SELECT price FROM service_catalog WHERE name = 'Consultation Fee'`
+      );
+      const price = fee.rows[0]?.price || 0;
+      for (const c of consultations.rows) {
+        charges.push({
+          category: 'Consultation',
+          description: 'Consultation Fee',
+          source_table: 'consultations',
+          source_id: c.id,
+          quantity: 1,
+          unit_price: price,
+          amount: price
+        });
+      }
+    }
+
+    // 2. Laboratory — completed lab test results, not yet invoiced
+    const labItems = await pool.query(
+      `SELECT lri.id, lt.name, lt.price
+       FROM lab_request_items lri
+       JOIN lab_requests lr ON lr.id = lri.lab_request_id
+       JOIN lab_tests lt ON lt.id = lri.test_id
+       WHERE lr.visit_id = $1
+       AND lri.entered_at IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM invoice_items ii
+         WHERE ii.source_table = 'lab_request_items' AND ii.source_id = lri.id
+       )`,
+      [visitId]
+    );
+    for (const item of labItems.rows) {
+      charges.push({
+        category: 'Laboratory',
+        description: item.name,
+        source_table: 'lab_request_items',
+        source_id: item.id,
+        quantity: 1,
+        unit_price: item.price,
+        amount: item.price
+      });
+    }
+
+    // 3. Pharmacy — dispensed prescription items, not yet invoiced
+    const rxItems = await pool.query(
+      `SELECT pi.id, d.generic_name, pi.quantity_dispensed, ds.selling_price
+       FROM prescription_items pi
+       JOIN prescriptions p ON p.id = pi.prescription_id
+       JOIN drugs d ON d.id = pi.drug_id
+       LEFT JOIN drug_stock ds ON ds.id = pi.drug_stock_id
+       WHERE p.visit_id = $1
+       AND pi.dispensed_at IS NOT NULL
+       AND pi.quantity_dispensed > 0
+       AND NOT EXISTS (
+         SELECT 1 FROM invoice_items ii
+         WHERE ii.source_table = 'prescription_items' AND ii.source_id = pi.id
+       )`,
+      [visitId]
+    );
+    for (const item of rxItems.rows) {
+      const unit = item.selling_price || 0;
+      const qty = item.quantity_dispensed;
+      charges.push({
+        category: 'Pharmacy',
+        description: item.generic_name,
+        source_table: 'prescription_items',
+        source_id: item.id,
+        quantity: qty,
+        unit_price: unit,
+        amount: unit * qty
+      });
+    }
+
+    // 4. Procedures — completed consultation procedures, not yet invoiced
+    const procItems = await pool.query(
+      `SELECT cp.id, pc.name, pc.base_price
+       FROM consultation_procedures cp
+       JOIN consultations c ON c.id = cp.consultation_id
+       JOIN procedure_catalog pc ON pc.id = cp.procedure_id
+       WHERE c.visit_id = $1
+       AND cp.status = 'Completed'
+       AND NOT EXISTS (
+         SELECT 1 FROM invoice_items ii
+         WHERE ii.source_table = 'consultation_procedures' AND ii.source_id = cp.id
+       )`,
+      [visitId]
+    );
+    for (const item of procItems.rows) {
+      charges.push({
+        category: 'Procedures',
+        description: item.name,
+        source_table: 'consultation_procedures',
+        source_id: item.id,
+        quantity: 1,
+        unit_price: item.base_price,
+        amount: item.base_price
+      });
+    }
+
+    // 5. Bed/Ward — non-maternity admissions only, per night stayed
+    const admissionRows = await pool.query(
+      `SELECT a.id, a.admission_date, a.discharge_date, wt.daily_rate, w.name AS ward_name
+       FROM admissions a
+       JOIN wards w ON w.id = a.ward_id
+       JOIN ward_types wt ON wt.id = w.ward_type_id
+       WHERE a.visit_id = $1
+       AND w.name != 'Maternity'
+       AND NOT EXISTS (
+         SELECT 1 FROM invoice_items ii
+         WHERE ii.source_table = 'admissions' AND ii.source_id = a.id
+       )`,
+      [visitId]
+    );
+    for (const adm of admissionRows.rows) {
+      const end = adm.discharge_date ? new Date(adm.discharge_date) : new Date();
+      const start = new Date(adm.admission_date);
+      const nights = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+      const rate = parseFloat(adm.daily_rate) || 0;
+      charges.push({
+        category: 'Bed/Ward',
+        description: `${adm.ward_name} Ward — ${nights} night(s)`,
+        source_table: 'admissions',
+        source_id: adm.id,
+        quantity: nights,
+        unit_price: rate,
+        amount: rate * nights
+      });
+    }
+
+    // Group by category with subtotals, plus grand total
+    const byCategory = {};
+    let grossTotal = 0;
+    for (const c of charges) {
+      if (!byCategory[c.category]) byCategory[c.category] = { items: [], subtotal: 0 };
+      byCategory[c.category].items.push(c);
+      byCategory[c.category].subtotal += parseFloat(c.amount);
+      grossTotal += parseFloat(c.amount);
+    }
+
+    res.json({
+      success: true,
+      visit_id: visitId,
+      categories: byCategory,
+      gross_total: grossTotal
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 module.exports = router;
