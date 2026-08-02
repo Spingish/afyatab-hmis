@@ -9,7 +9,7 @@ const { requirePermission } = require('../middleware/auth');
 // so req.user is already populated here. This just checks the permission.
 const requireSuperAdmin = requirePermission('superadmin.access');
 
-// GET /api/superadmin/overview — full system overview
+// GET /api/superadmin/overview - full system overview
 router.get('/overview', requireSuperAdmin, async (req, res) => {
   try {
     const [
@@ -51,7 +51,7 @@ router.get('/overview', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// GET /api/superadmin/users — all system users
+// GET /api/superadmin/users - all system users
 router.get('/users', requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query(
@@ -72,54 +72,102 @@ router.get('/users', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// POST /api/superadmin/users — create new system user
+// GET /api/superadmin/staff-without-login - active staff who don't yet have
+// a system login. Used to power the "link to existing staff" option when
+// creating a new user, instead of always creating a brand-new staff record.
+router.get('/staff-without-login', requireSuperAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT s.id, s.staff_no, s.first_name, s.last_name,
+              s.phone, s.email, s.department_id, s.role_id,
+              d.name AS department_name
+       FROM staff s
+       LEFT JOIN departments d ON d.id = s.department_id
+       WHERE s.status = 'Active'
+         AND NOT EXISTS (SELECT 1 FROM users u WHERE u.staff_id = s.id)
+       ORDER BY s.first_name, s.last_name`
+    );
+    res.json({ success: true, staff: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/superadmin/users - create new system user.
+// Two modes, distinguished by whether staff_id is present in the body:
+//   - staff_id provided  -> link a login to an existing staff record
+//                           (staff fields in the body are ignored)
+//   - staff_id omitted   -> create a brand-new staff record, then the login
 router.post('/users', requireSuperAdmin, async (req, res) => {
   try {
     const {
+      staff_id,
       first_name, last_name, gender, phone, email,
       national_id, department_id, role_id,
       username, password, shift, hire_date
     } = req.body;
 
-    if (!first_name||!last_name||!username||!password||!role_id) {
+    if (!username || !password || !role_id) {
       return res.status(400).json({
         success: false,
-        error: 'first_name, last_name, username, password and role_id are required'
+        error: 'username, password and role_id are required'
       });
     }
 
     // Check username not taken
-    const existing = await pool.query('SELECT id FROM users WHERE username=$1',[username]);
-    if (existing.rows[0]) {
+    const existingUser = await pool.query('SELECT id FROM users WHERE username=$1',[username]);
+    if (existingUser.rows[0]) {
       return res.status(409).json({ success: false, error: 'Username already taken' });
     }
 
-    // Generate staff number
-    const count = await pool.query('SELECT COUNT(*) FROM staff');
-    const staff_no = 'S' + String(parseInt(count.rows[0].count)+1).padStart(3,'0');
+    let staffRow;
 
-    // Create staff record
-    const staffResult = await pool.query(
-      `INSERT INTO staff (
-        staff_no, first_name, last_name, gender,
-        phone, email, national_id, department_id,
-        role_id, shift, hire_date, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Active')
-      RETURNING *`,
-      [
-        staff_no, first_name, last_name, gender||'Male',
-        phone||null, email||null, national_id||null,
-        department_id||null, role_id,
-        shift||'Day', hire_date||null
-      ]
-    );
+    if (staff_id) {
+      // Link the login to an existing staff record
+      const staffCheck = await pool.query('SELECT * FROM staff WHERE id=$1', [staff_id]);
+      if (!staffCheck.rows[0]) {
+        return res.status(404).json({ success: false, error: 'Staff record not found' });
+      }
+      const staffHasLogin = await pool.query('SELECT id FROM users WHERE staff_id=$1', [staff_id]);
+      if (staffHasLogin.rows[0]) {
+        return res.status(409).json({ success: false, error: 'This staff member already has a login' });
+      }
+      staffRow = staffCheck.rows[0];
+    } else {
+      // Create a brand-new staff record
+      if (!first_name || !last_name) {
+        return res.status(400).json({
+          success: false,
+          error: 'first_name and last_name are required when creating a new staff record'
+        });
+      }
+
+      const count = await pool.query('SELECT COUNT(*) FROM staff');
+      const staff_no = 'S' + String(parseInt(count.rows[0].count)+1).padStart(3,'0');
+
+      const staffResult = await pool.query(
+        `INSERT INTO staff (
+          staff_no, first_name, last_name, gender,
+          phone, email, national_id, department_id,
+          role_id, shift, hire_date, status
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Active')
+        RETURNING *`,
+        [
+          staff_no, first_name, last_name, gender||'Male',
+          phone||null, email||null, national_id||null,
+          department_id||null, role_id,
+          shift||'Day', hire_date||null
+        ]
+      );
+      staffRow = staffResult.rows[0];
+    }
 
     // Hash password and create user
     const password_hash = await bcrypt.hash(password, 12);
     const userResult = await pool.query(
       `INSERT INTO users (staff_id, username, password_hash, role_id, is_active)
        VALUES ($1,$2,$3,$4,TRUE) RETURNING id, username`,
-      [staffResult.rows[0].id, username, password_hash, role_id]
+      [staffRow.id, username, password_hash, role_id]
     );
 
     // Log to audit
@@ -129,14 +177,18 @@ router.post('/users', requireSuperAdmin, async (req, res) => {
       [
         req.user.id,
         userResult.rows[0].id,
-        JSON.stringify({ username, role_id, staff_no })
+        JSON.stringify({
+          username, role_id,
+          staff_no: staffRow.staff_no,
+          linked_existing_staff: !!staff_id
+        })
       ]
     );
 
     res.status(201).json({
       success:  true,
       message:  `User ${username} created successfully`,
-      staff_no: staff_no,
+      staff_no: staffRow.staff_no,
       user:     userResult.rows[0]
     });
   } catch (err) {
@@ -144,7 +196,7 @@ router.post('/users', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/superadmin/users/:id/toggle — activate/deactivate user
+// PUT /api/superadmin/users/:id/toggle - activate/deactivate user
 router.put('/users/:id/toggle', requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query(
@@ -165,7 +217,7 @@ router.put('/users/:id/toggle', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/superadmin/users/:id/role — change user role
+// PUT /api/superadmin/users/:id/role - change user role
 router.put('/users/:id/role', requireSuperAdmin, async (req, res) => {
   try {
     const { role_id } = req.body;
@@ -183,7 +235,7 @@ router.put('/users/:id/role', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/superadmin/users/:id/reset-password — reset password
+// PUT /api/superadmin/users/:id/reset-password - reset password
 router.put('/users/:id/reset-password', requireSuperAdmin, async (req, res) => {
   try {
     const { new_password } = req.body;
@@ -201,7 +253,7 @@ router.put('/users/:id/reset-password', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// GET /api/superadmin/audit-log — system audit trail
+// GET /api/superadmin/audit-log - system audit trail
 router.get('/audit-log', requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query(
@@ -221,7 +273,7 @@ router.get('/audit-log', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// GET /api/superadmin/roles — all roles
+// GET /api/superadmin/roles - all roles
 router.get('/roles', requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM roles ORDER BY id');
@@ -231,7 +283,7 @@ router.get('/roles', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// GET /api/superadmin/departments — all departments
+// GET /api/superadmin/departments - all departments
 router.get('/departments', requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM departments ORDER BY name');
