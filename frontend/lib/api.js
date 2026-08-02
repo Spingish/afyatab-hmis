@@ -62,6 +62,10 @@ export const visitAPI = {
   continueVisit:  (data) => API.post('/visits/continue', data),
   updateStage:    (id, stage) => API.put(`/visits/${id}/stage`, { stage }),
   discharge:      (id, data) => API.put(`/visits/${id}/discharge`, data),
+  // Look-up (daily front-desk workspace)
+  lookup:         (params) => API.get('/visits/lookup', { params }),
+  moveLocation:   (id, location) => API.put(`/visits/${id}/move`, { location }),
+  deleteVisit:    (id) => API.delete(`/visits/${id}`),
 };
 
 // Staff
