@@ -2,6 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const pool    = require('../config/db');
+const { recordEncounterService } = require('../utils/encounterService');
 
 // GET consultation queue (patients at Consultation stage today)
 router.get('/queue', async (req, res) => {
@@ -165,6 +166,11 @@ router.post('/', async (req, res) => {
     );
 
     const consultation_id = consult.rows[0].id;
+    await recordEncounterService(pool, {
+      visit_id, patient_id, service_type: 'Consultation',
+      reference_table: 'consultations', reference_id: consultation_id,
+      performed_by: doctor_id
+    });
 
     // Save diagnoses
     if (diagnoses && diagnoses.length > 0) {
@@ -196,6 +202,11 @@ router.post('/', async (req, res) => {
         RETURNING id`,
         [prescription_no, patient_id, visit_id, consultation_id, doctor_id]
       );
+      await recordEncounterService(pool, {
+        visit_id, patient_id, service_type: 'Pharmacy',
+        reference_table: 'prescriptions', reference_id: rx.rows[0].id,
+        performed_by: doctor_id, status: 'Pending'
+      });
 
       for (const item of prescriptions) {
         await pool.query(
@@ -231,6 +242,11 @@ router.post('/', async (req, res) => {
         RETURNING id`,
         [lab_request_no, patient_id, visit_id, doctor_id]
       );
+      await recordEncounterService(pool, {
+        visit_id, patient_id, service_type: 'Laboratory',
+        reference_table: 'lab_requests', reference_id: lr.rows[0].id,
+        performed_by: doctor_id, status: 'Pending'
+      });
 
       for (const test_id of lab_tests) {
         await pool.query(

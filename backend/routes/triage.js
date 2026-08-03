@@ -2,6 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const pool    = require('../config/db');
+const { recordEncounterService } = require('../utils/encounterService');
 
 // GET triage for a visit
 router.get('/visit/:visit_id', async (req, res) => {
@@ -112,6 +113,11 @@ router.post('/', async (req, res) => {
           triaged_by || null
         ]
       );
+      await recordEncounterService(pool, {
+        visit_id, patient_id, service_type: 'Triage',
+        reference_table: 'triage', reference_id: result.rows[0].id,
+        performed_by: triaged_by || null
+      });
     }
 
     // Auto-move visit to Triage stage

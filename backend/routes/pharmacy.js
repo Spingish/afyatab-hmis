@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const pool    = require('../config/db');
+const { recordEncounterService } = require('../utils/encounterService');
 
 // GET all drug stock
 router.get('/stock', async (req, res) => {
@@ -132,6 +133,11 @@ router.post('/prescriptions', async (req, res) => {
         consultation_id || null, prescribed_by, notes || null
       ]
     );
+    await recordEncounterService(pool, {
+      visit_id: visit_id || null, patient_id, service_type: 'Pharmacy',
+      reference_table: 'prescriptions', reference_id: pr.rows[0].id,
+      performed_by: prescribed_by, status: 'Pending'
+    });
 
     for (const item of items) {
       await pool.query(

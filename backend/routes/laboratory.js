@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const pool    = require('../config/db');
+const { recordEncounterService } = require('../utils/encounterService');
 
 // GET all lab requests
 router.get('/', async (req, res) => {
@@ -107,6 +108,11 @@ router.post('/', async (req, res) => {
         priority || 'Normal', clinical_notes || null
       ]
     );
+    await recordEncounterService(pool, {
+      visit_id: visit_id || null, patient_id, service_type: 'Laboratory',
+      reference_table: 'lab_requests', reference_id: lr.rows[0].id,
+      performed_by: requested_by || null, status: 'Pending'
+    });
 
     // Insert test items
     for (const test_id of tests) {
