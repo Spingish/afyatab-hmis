@@ -13,6 +13,7 @@ export default function SuperAdmin() {
   const [roles, setRoles]         = useState([]);
   const [depts, setDepts]         = useState([]);
   const [auditLog, setAuditLog]   = useState([]);
+  const [staffWithoutLogin, setStaffWithoutLogin] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [tab, setTab]             = useState('overview');
   const [msg, setMsg]             = useState('');
@@ -21,6 +22,11 @@ export default function SuperAdmin() {
   const [submitting, setSubmitting] = useState(false);
   const [resetUserId, setResetUserId] = useState(null);
   const [newPassword, setNewPassword] = useState('');
+
+  // 'new' = create a brand-new staff record + login
+  // 'existing' = link a login to a staff record that already exists (no login yet)
+  const [createMode, setCreateMode] = useState('new');
+  const [selectedStaffId, setSelectedStaffId] = useState('');
 
   const [form, setForm] = useState({
     first_name:'', last_name:'', gender:'Male',
@@ -39,62 +45,81 @@ export default function SuperAdmin() {
     setLoading(true);
     try {
       const headers = getAuthHeader();
-      const [ov, us, rl, dp, al] = await Promise.all([
-        axios.get('/api/superadmin/overview',    { headers }),
-        axios.get('/api/superadmin/users',       { headers }),
-        axios.get('/api/superadmin/roles',       { headers }),
-        axios.get('/api/superadmin/departments', { headers }),
-        axios.get('/api/superadmin/audit-log',   { headers }),
+      const [ov, us, rl, dp, al, sw] = await Promise.all([
+        axios.get('/api/superadmin/overview',           { headers }),
+        axios.get('/api/superadmin/users',              { headers }),
+        axios.get('/api/superadmin/roles',              { headers }),
+        axios.get('/api/superadmin/departments',        { headers }),
+        axios.get('/api/superadmin/audit-log',          { headers }),
+        axios.get('/api/superadmin/staff-without-login',{ headers }),
       ]);
       setOverview(ov.data.overview);
       setUsers(us.data.users);
       setRoles(rl.data.roles);
       setDepts(dp.data.departments);
       setAuditLog(al.data.logs);
+      setStaffWithoutLogin(sw.data.staff);
     } catch (err) {
       if (err.response?.status === 403) {
-        showMsg('❌ Access denied — Super Admin only', 'error');
+        showMsg('Error: Access denied - Super Admin only', 'error');
       } else {
-        showMsg('❌ Failed to load admin data', 'error');
+        showMsg('Error: Failed to load admin data', 'error');
       }
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
+  const resetForm = () => {
+    setForm({ first_name:'', last_name:'', gender:'Male', phone:'', email:'', national_id:'', department_id:'', role_id:'', username:'', password:'', shift:'Day', hire_date:'' });
+    setCreateMode('new');
+    setSelectedStaffId('');
+  };
+
   const handleCreateUser = async () => {
-    if (!form.first_name||!form.last_name||!form.username||!form.password||!form.role_id) {
+    if (!form.username || !form.password || !form.role_id) {
       showMsg('Please fill all required fields', 'error'); return;
     }
+    if (createMode === 'existing' && !selectedStaffId) {
+      showMsg('Please select a staff member to link', 'error'); return;
+    }
+    if (createMode === 'new' && (!form.first_name || !form.last_name)) {
+      showMsg('Please fill all required fields', 'error'); return;
+    }
+
     setSubmitting(true);
     try {
-      const r = await axios.post('/api/superadmin/users', form, { headers: getAuthHeader() });
-      showMsg(`✅ User ${form.username} created — Staff No: ${r.data.staff_no}`);
+      const payload = createMode === 'existing'
+        ? { staff_id: selectedStaffId, username: form.username, password: form.password, role_id: form.role_id }
+        : { ...form };
+
+      const r = await axios.post('/api/superadmin/users', payload, { headers: getAuthHeader() });
+      showMsg(`Success: User ${form.username} created - Staff No: ${r.data.staff_no}`);
       setShowForm(false);
-      setForm({ first_name:'', last_name:'', gender:'Male', phone:'', email:'', national_id:'', department_id:'', role_id:'', username:'', password:'', shift:'Day', hire_date:'' });
+      resetForm();
       load();
     } catch (err) {
-      showMsg('❌ ' + (err.response?.data?.error || 'Error creating user'), 'error');
+      showMsg('Error: ' + (err.response?.data?.error || 'Error creating user'), 'error');
     } finally { setSubmitting(false); }
   };
 
   const toggleUser = async (id, username) => {
     try {
       const r = await axios.put(`/api/superadmin/users/${id}/toggle`, {}, { headers: getAuthHeader() });
-      showMsg(`✅ ${username} ${r.data.user.is_active ? 'activated' : 'deactivated'}`);
+      showMsg(`Success: ${username} ${r.data.user.is_active ? 'activated' : 'deactivated'}`);
       load();
     } catch (err) {
-      showMsg('❌ Failed to update user', 'error');
+      showMsg('Error: Failed to update user', 'error');
     }
   };
 
   const changeRole = async (id, role_id) => {
     try {
       await axios.put(`/api/superadmin/users/${id}/role`, { role_id }, { headers: getAuthHeader() });
-      showMsg('✅ Role updated successfully');
+      showMsg('Success: Role updated successfully');
       load();
     } catch (err) {
-      showMsg('❌ Failed to update role', 'error');
+      showMsg('Error: Failed to update role', 'error');
     }
   };
 
@@ -102,22 +127,22 @@ export default function SuperAdmin() {
     if (!newPassword || newPassword.length < 6) { showMsg('Password must be at least 6 characters', 'error'); return; }
     try {
       await axios.put(`/api/superadmin/users/${resetUserId}/reset-password`, { new_password: newPassword }, { headers: getAuthHeader() });
-      showMsg('✅ Password reset successfully');
+      showMsg('Success: Password reset successfully');
       setResetUserId(null); setNewPassword('');
     } catch (err) {
-      showMsg('❌ ' + (err.response?.data?.error || 'Error'), 'error');
+      showMsg('Error: ' + (err.response?.data?.error || 'Error'), 'error');
     }
   };
 
   const statCards = overview ? [
-    { label:'Total Patients',       value: overview.total_patients,      icon:'👥', color:'border-blue-500',   bg:'bg-blue-50',   text:'text-blue-700'   },
-    { label:'Visits Today',         value: overview.visits_today,        icon:'🚪', color:'border-cyan-500',   bg:'bg-cyan-50',   text:'text-cyan-700'   },
-    { label:'Active Users',         value: overview.active_users,        icon:'👤', color:'border-violet-500', bg:'bg-violet-50', text:'text-violet-700' },
-    { label:'Active Staff',         value: overview.active_staff,        icon:'👨‍⚕️', color:'border-green-500',  bg:'bg-green-50',  text:'text-green-700'  },
-    { label:'Pending Bills',        value: overview.pending_bills,       icon:'💰', color:'border-red-500',    bg:'bg-red-50',    text:'text-red-700'    },
-    { label:'Revenue Today (KES)', value: `${parseFloat(overview.revenue_today||0).toLocaleString()}`, icon:'📈', color:'border-emerald-500', bg:'bg-emerald-50', text:'text-emerald-700' },
-    { label:'Lab Requests Today',  value: overview.lab_requests_today,  icon:'🧪', color:'border-yellow-500', bg:'bg-yellow-50', text:'text-yellow-700' },
-    { label:'Prescriptions Today', value: overview.prescriptions_today, icon:'💊', color:'border-pink-500',   bg:'bg-pink-50',   text:'text-pink-700'   },
+    { label:'Total Patients',       value: overview.total_patients,      color:'border-blue-500',   bg:'bg-blue-50',   text:'text-blue-700'   },
+    { label:'Visits Today',         value: overview.visits_today,        color:'border-cyan-500',   bg:'bg-cyan-50',   text:'text-cyan-700'   },
+    { label:'Active Users',         value: overview.active_users,        color:'border-violet-500', bg:'bg-violet-50', text:'text-violet-700' },
+    { label:'Active Staff',         value: overview.active_staff,        color:'border-green-500',  bg:'bg-green-50',  text:'text-green-700'  },
+    { label:'Pending Bills',        value: overview.pending_bills,       color:'border-red-500',    bg:'bg-red-50',    text:'text-red-700'    },
+    { label:'Revenue Today (KES)', value: `${parseFloat(overview.revenue_today||0).toLocaleString()}`, color:'border-emerald-500', bg:'bg-emerald-50', text:'text-emerald-700' },
+    { label:'Lab Requests Today',  value: overview.lab_requests_today,  color:'border-yellow-500', bg:'bg-yellow-50', text:'text-yellow-700' },
+    { label:'Prescriptions Today', value: overview.prescriptions_today, color:'border-pink-500',   bg:'bg-pink-50',   text:'text-pink-700'   },
   ] : [];
 
   return (
@@ -125,14 +150,12 @@ export default function SuperAdmin() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            🛡️ Super Admin Panel
-          </h1>
-          <p className="text-gray-500 text-sm">TibaMax HMIS — Full System Control</p>
+          <h1 className="text-2xl font-bold">Super Admin Panel</h1>
+          <p className="text-gray-500 text-sm">TibaMax HMIS - Full System Control</p>
         </div>
         <div className="flex gap-2">
           <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide">
-            🔐 Super Admin Access
+            Super Admin Access
           </span>
         </div>
       </div>
@@ -141,17 +164,17 @@ export default function SuperAdmin() {
         <div className={`p-3 rounded-lg mb-4 text-sm border flex items-center justify-between
           ${msgType==='success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
           <span>{msg}</span>
-          <button onClick={()=>setMsg('')} className="ml-3 font-bold">×</button>
+          <button onClick={()=>setMsg('')} className="ml-3 font-bold">X</button>
         </div>
       )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
         {[
-          ['overview','📊 Overview'],
-          ['users','👤 User Management'],
-          ['audit','📋 Audit Log'],
-          ['system','⚙️ System Info'],
+          ['overview','Overview'],
+          ['users','User Management'],
+          ['audit','Audit Log'],
+          ['system','System Info'],
         ].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
@@ -177,13 +200,8 @@ export default function SuperAdmin() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {statCards.map(c => (
                   <div key={c.label} className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 border-l-4 ${c.color} rounded-xl p-4`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase font-semibold mb-1">{c.label}</p>
-                        <p className="text-2xl font-bold">{c.value}</p>
-                      </div>
-                      <span className="text-2xl">{c.icon}</span>
-                    </div>
+                    <p className="text-xs text-gray-500 uppercase font-semibold mb-1">{c.label}</p>
+                    <p className="text-2xl font-bold">{c.value}</p>
                   </div>
                 ))}
               </div>
@@ -201,7 +219,7 @@ export default function SuperAdmin() {
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium
                           ${r.name==='Super Admin' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {r.name==='Super Admin' ? '🔐 Super' : 'Role'}
+                          {r.name==='Super Admin' ? 'Super' : 'Role'}
                         </span>
                       </div>
                     ))}
@@ -241,16 +259,46 @@ export default function SuperAdmin() {
               {showForm && (
                 <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-5">
                   <h3 className="font-bold mb-4">Create New System User</h3>
+
+                  {/* Mode toggle: new staff record vs. linking to an existing one */}
+                  <div className="flex gap-2 mb-4 border border-gray-200 dark:border-gray-600 rounded-lg p-1 w-fit">
+                    <button
+                      onClick={() => { setCreateMode('new'); setSelectedStaffId(''); }}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold ${createMode==='new' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>
+                      New Staff Member
+                    </button>
+                    <button
+                      onClick={() => setCreateMode('existing')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold ${createMode==='existing' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>
+                      Link to Existing Staff ({staffWithoutLogin.length})
+                    </button>
+                  </div>
+
+                  {createMode === 'existing' ? (
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Staff Member *</label>
+                      <select value={selectedStaffId} onChange={e => setSelectedStaffId(e.target.value)}
+                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
+                        <option value="">Select staff member...</option>
+                        {staffWithoutLogin.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.staff_no} - {s.first_name} {s.last_name}{s.department_name ? ` (${s.department_name})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {staffWithoutLogin.length === 0 && (
+                        <p className="text-xs text-gray-400 mt-1">Every active staff member already has a login.</p>
+                      )}
+                    </div>
+                  ) : null}
+
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {[
+                    {createMode === 'new' && [
                       { label:'First Name *',  key:'first_name', type:'text'  },
                       { label:'Last Name *',   key:'last_name',  type:'text'  },
                       { label:'Phone',         key:'phone',      type:'tel'   },
                       { label:'Email',         key:'email',      type:'email' },
                       { label:'National ID',   key:'national_id',type:'text'  },
-                      { label:'Username *',    key:'username',   type:'text'  },
-                      { label:'Password *',    key:'password',   type:'password'},
-                      { label:'Hire Date',     key:'hire_date',  type:'date'  },
                     ].map(f => (
                       <div key={f.key}>
                         <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">{f.label}</label>
@@ -259,13 +307,39 @@ export default function SuperAdmin() {
                           className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700" />
                       </div>
                     ))}
+
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Gender</label>
-                      <select value={form.gender} onChange={e => setForm({...form,gender:e.target.value})}
-                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
-                        <option>Male</option><option>Female</option>
-                      </select>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Username *</label>
+                      <input type="text" value={form.username}
+                        onChange={e => setForm({...form,username:e.target.value})}
+                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700" />
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Password *</label>
+                      <input type="password" value={form.password}
+                        onChange={e => setForm({...form,password:e.target.value})}
+                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700" />
+                    </div>
+
+                    {createMode === 'new' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Hire Date</label>
+                        <input type="date" value={form.hire_date}
+                          onChange={e => setForm({...form,hire_date:e.target.value})}
+                          className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700" />
+                      </div>
+                    )}
+
+                    {createMode === 'new' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Gender</label>
+                        <select value={form.gender} onChange={e => setForm({...form,gender:e.target.value})}
+                          className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
+                          <option>Male</option><option>Female</option>
+                        </select>
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Role *</label>
                       <select value={form.role_id} onChange={e => setForm({...form,role_id:e.target.value})}
@@ -274,28 +348,35 @@ export default function SuperAdmin() {
                         {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Department</label>
-                      <select value={form.department_id} onChange={e => setForm({...form,department_id:e.target.value})}
-                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
-                        <option value="">Select department...</option>
-                        {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Shift</label>
-                      <select value={form.shift} onChange={e => setForm({...form,shift:e.target.value})}
-                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
-                        <option>Day</option><option>Night</option><option>Rotating</option>
-                      </select>
-                    </div>
+
+                    {createMode === 'new' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Department</label>
+                        <select value={form.department_id} onChange={e => setForm({...form,department_id:e.target.value})}
+                          className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
+                          <option value="">Select department...</option>
+                          {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {createMode === 'new' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Shift</label>
+                        <select value={form.shift} onChange={e => setForm({...form,shift:e.target.value})}
+                          className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 dark:bg-gray-700">
+                          <option>Day</option><option>Night</option><option>Rotating</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
+
                   <div className="flex gap-3 mt-4">
                     <button onClick={handleCreateUser} disabled={submitting}
                       className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-400">
-                      {submitting ? 'Creating...' : 'Create User'}
+                      {submitting ? 'Creating...' : (createMode === 'existing' ? 'Create Login' : 'Create User')}
                     </button>
-                    <button onClick={() => setShowForm(false)}
+                    <button onClick={() => { setShowForm(false); resetForm(); }}
                       className="border border-gray-300 px-6 py-2 rounded-lg text-sm">
                       Cancel
                     </button>
@@ -352,8 +433,8 @@ export default function SuperAdmin() {
                               {roles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
                             </select>
                           </td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{u.department_name || '—'}</td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{u.phone || '—'}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{u.department_name || '-'}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{u.phone || '-'}</td>
                           <td className="px-4 py-3 text-gray-400 text-xs">
                             {u.last_login ? new Date(u.last_login).toLocaleString('en-KE') : 'Never'}
                           </td>
@@ -407,7 +488,7 @@ export default function SuperAdmin() {
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {new Date(log.performed_at).toLocaleString('en-KE')}
                           </td>
-                          <td className="px-4 py-3 font-medium text-xs">{log.performed_by || log.username || '—'}</td>
+                          <td className="px-4 py-3 font-medium text-xs">{log.performed_by || log.username || '-'}</td>
                           <td className="px-4 py-3">
                             <span className={`text-xs px-2 py-1 rounded-full font-medium
                               ${log.action==='CREATE' ? 'bg-green-100 text-green-700' : log.action==='DELETE' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -417,7 +498,7 @@ export default function SuperAdmin() {
                           <td className="px-4 py-3 text-gray-500 text-xs font-mono">{log.table_name}</td>
                           <td className="px-4 py-3 text-gray-500 text-xs">{log.record_id}</td>
                           <td className="px-4 py-3 text-gray-400 text-xs max-w-48 truncate">
-                            {log.new_values ? JSON.stringify(log.new_values).slice(0,60) + '...' : '—'}
+                            {log.new_values ? JSON.stringify(log.new_values).slice(0,60) + '...' : '-'}
                           </td>
                         </tr>
                       ))}
@@ -457,10 +538,10 @@ export default function SuperAdmin() {
                 {[
                   { label:'Name',       value:'Spingish Kasimili'         },
                   { label:'Username',   value:'admin'                      },
-                  { label:'Role',       value:'Super Admin 🔐'             },
+                  { label:'Role',       value:'Super Admin'                },
                   { label:'Email',      value:'spingishbwire@gmail.com'    },
                   { label:'Staff No',   value:'S001'                       },
-                  { label:'Status',     value:'Active ✅'                  },
+                  { label:'Status',     value:'Active'                     },
                 ].map(s => (
                   <div key={s.label} className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0 text-sm">
                     <span className="text-gray-500">{s.label}</span>
@@ -468,7 +549,7 @@ export default function SuperAdmin() {
                   </div>
                 ))}
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-                  <strong>⚠️ Security Note:</strong> The Super Admin account has full system access. Keep credentials secure and change the default password immediately.
+                  <strong>Security Note:</strong> The Super Admin account has full system access. Keep credentials secure and change the default password immediately.
                 </div>
               </div>
             </div>
