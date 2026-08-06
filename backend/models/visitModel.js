@@ -289,7 +289,7 @@ const VisitModel = {
     const result = await pool.query(
       `SELECT v.id, v.visit_no, v.visit_type, v.patient_type,
               v.visit_time, v.visit_date, v.current_stage, v.status,
-              v.directed_to, v.location_locked,
+              v.directed_to, (v.status != 'Active') AS location_locked,
               v.visit_sequence, v.visit_classification,
               p.id AS patient_id, p.patient_no, p.first_name, p.last_name,
               p.phone, p.gender, p.date_of_birth,
