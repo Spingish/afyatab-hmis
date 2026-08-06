@@ -206,22 +206,46 @@ router.get('/meta/payment-methods', async (req, res) => {
   }
 });
 // GET aggregated unbilled charges for a visit (Phase 1: charge aggregation)
-// Excludes MCH/maternity entirely — those are SHA-capitated or a
+// Excludes MCH/maternity entirely -- those are SHA-capitated or a
 // separate SHA claim, never a patient invoice item.
+//
+// IMPORTANT: a patient's care for one episode can now span more than one
+// visit row (continuation_of_visit_id links an original visit to a
+// post-continuation-window "Revisit"). We resolve the full chain first so
+// billing covers the whole episode, not just whichever single visit_id
+// was passed in.
 router.get('/charges/visit/:visitId', async (req, res) => {
   try {
     const visitId = req.params.visitId;
+
+    // Resolve every visit_id connected to this one via continuation links,
+    // walking both up (parent) and down (children) transitively.
+    const chainResult = await pool.query(
+      `WITH RECURSIVE chain AS (
+         SELECT id, continuation_of_visit_id FROM visits WHERE id = $1
+         UNION
+         SELECT v.id, v.continuation_of_visit_id FROM visits v
+         JOIN chain c ON v.id = c.continuation_of_visit_id OR v.continuation_of_visit_id = c.id
+       )
+       SELECT id FROM chain`,
+      [visitId]
+    );
+    const visitIds = chainResult.rows.map(r => r.id);
+    if (visitIds.length === 0) {
+      return res.status(404).json({ success: false, error: 'Visit not found' });
+    }
+
     const charges = [];
 
-    // 1. Consultation Fee — one per consultation on this visit
+    // 1. Consultation Fee -- one per consultation across the whole chain
     const consultations = await pool.query(
       `SELECT c.id FROM consultations c
-       WHERE c.visit_id = $1
+       WHERE c.visit_id = ANY($1)
        AND NOT EXISTS (
          SELECT 1 FROM invoice_items ii
          WHERE ii.source_table = 'consultations' AND ii.source_id = c.id
        )`,
-      [visitId]
+      [visitIds]
     );
     if (consultations.rows.length) {
       const fee = await pool.query(
@@ -241,19 +265,19 @@ router.get('/charges/visit/:visitId', async (req, res) => {
       }
     }
 
-    // 2. Laboratory — completed lab test results, not yet invoiced
+    // 2. Laboratory -- completed lab test results, not yet invoiced
     const labItems = await pool.query(
       `SELECT lri.id, lt.name, lt.price
        FROM lab_request_items lri
        JOIN lab_requests lr ON lr.id = lri.lab_request_id
        JOIN lab_tests lt ON lt.id = lri.test_id
-       WHERE lr.visit_id = $1
+       WHERE lr.visit_id = ANY($1)
        AND lri.entered_at IS NOT NULL
        AND NOT EXISTS (
          SELECT 1 FROM invoice_items ii
          WHERE ii.source_table = 'lab_request_items' AND ii.source_id = lri.id
        )`,
-      [visitId]
+      [visitIds]
     );
     for (const item of labItems.rows) {
       charges.push({
@@ -267,21 +291,21 @@ router.get('/charges/visit/:visitId', async (req, res) => {
       });
     }
 
-    // 3. Pharmacy — dispensed prescription items, not yet invoiced
+    // 3. Pharmacy -- dispensed prescription items, not yet invoiced
     const rxItems = await pool.query(
       `SELECT pi.id, d.generic_name, pi.quantity_dispensed, ds.selling_price
        FROM prescription_items pi
        JOIN prescriptions p ON p.id = pi.prescription_id
        JOIN drugs d ON d.id = pi.drug_id
        LEFT JOIN drug_stock ds ON ds.id = pi.drug_stock_id
-       WHERE p.visit_id = $1
+       WHERE p.visit_id = ANY($1)
        AND pi.dispensed_at IS NOT NULL
        AND pi.quantity_dispensed > 0
        AND NOT EXISTS (
          SELECT 1 FROM invoice_items ii
          WHERE ii.source_table = 'prescription_items' AND ii.source_id = pi.id
        )`,
-      [visitId]
+      [visitIds]
     );
     for (const item of rxItems.rows) {
       const unit = item.selling_price || 0;
@@ -297,19 +321,19 @@ router.get('/charges/visit/:visitId', async (req, res) => {
       });
     }
 
-    // 4. Procedures — completed consultation procedures, not yet invoiced
+    // 4. Procedures -- completed consultation procedures, not yet invoiced
     const procItems = await pool.query(
       `SELECT cp.id, pc.name, pc.base_price
        FROM consultation_procedures cp
        JOIN consultations c ON c.id = cp.consultation_id
        JOIN procedure_catalog pc ON pc.id = cp.procedure_id
-       WHERE c.visit_id = $1
+       WHERE c.visit_id = ANY($1)
        AND cp.status = 'Completed'
        AND NOT EXISTS (
          SELECT 1 FROM invoice_items ii
          WHERE ii.source_table = 'consultation_procedures' AND ii.source_id = cp.id
        )`,
-      [visitId]
+      [visitIds]
     );
     for (const item of procItems.rows) {
       charges.push({
@@ -323,19 +347,19 @@ router.get('/charges/visit/:visitId', async (req, res) => {
       });
     }
 
-    // 5. Bed/Ward — non-maternity admissions only, per night stayed
+    // 5. Bed/Ward -- non-maternity admissions only, per night stayed
     const admissionRows = await pool.query(
       `SELECT a.id, a.admission_date, a.discharge_date, wt.daily_rate, w.name AS ward_name
        FROM admissions a
        JOIN wards w ON w.id = a.ward_id
        JOIN ward_types wt ON wt.id = w.ward_type_id
-       WHERE a.visit_id = $1
+       WHERE a.visit_id = ANY($1)
        AND w.name != 'Maternity'
        AND NOT EXISTS (
          SELECT 1 FROM invoice_items ii
          WHERE ii.source_table = 'admissions' AND ii.source_id = a.id
        )`,
-      [visitId]
+      [visitIds]
     );
     for (const adm of admissionRows.rows) {
       const end = adm.discharge_date ? new Date(adm.discharge_date) : new Date();
@@ -344,7 +368,7 @@ router.get('/charges/visit/:visitId', async (req, res) => {
       const rate = parseFloat(adm.daily_rate) || 0;
       charges.push({
         category: 'Bed/Ward',
-        description: `${adm.ward_name} Ward — ${nights} night(s)`,
+        description: `${adm.ward_name} Ward -- ${nights} night(s)`,
         source_table: 'admissions',
         source_id: adm.id,
         quantity: nights,
@@ -366,6 +390,7 @@ router.get('/charges/visit/:visitId', async (req, res) => {
     res.json({
       success: true,
       visit_id: visitId,
+      visit_chain: visitIds,
       categories: byCategory,
       gross_total: grossTotal
     });
